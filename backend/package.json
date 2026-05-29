@@ -20,7 +20,8 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.js",
     "check:migrations:down": "node ./scripts/check-migrations-down.js",
-    "test:rollback": "bash ./scripts/test-rollback.sh"
+    "test:rollback": "bash ./scripts/test-rollback.sh",
+    "generate:openapi": "ts-node -r tsconfig-paths/register scripts/generate-openapi-spec.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1019.0",

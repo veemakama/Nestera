@@ -16,11 +16,13 @@ import { CacheStrategyService } from '../modules/cache/cache-strategy.service';
 import { AuthRateLimitService } from './services/auth-rate-limit.service';
 import { AuthRateLimitGuard } from './guards/auth-rate-limit.guard';
 import { AuthSecurityAdminController } from './controllers/auth-security-admin.controller';
+import { AuditLog } from '../common/entities/audit-log.entity';
+import { AuditLogService } from '../common/services/audit-log.service';
 
 @Module({
   imports: [
     UserModule,
-    TypeOrmModule.forFeature([User, RefreshToken, Session]),
+    TypeOrmModule.forFeature([User, RefreshToken, Session, AuditLog]),
     CacheModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
@@ -45,6 +47,7 @@ import { AuthSecurityAdminController } from './controllers/auth-security-admin.c
     CacheStrategyService,
     AuthRateLimitService,
     AuthRateLimitGuard,
+    AuditLogService,
   ],
   exports: [
     AuthService,
@@ -52,6 +55,7 @@ import { AuthSecurityAdminController } from './controllers/auth-security-admin.c
     JwtModule,
     PassportModule,
     AuthRateLimitService,
+    AuditLogService,
   ],
 })
 export class AuthModule {}

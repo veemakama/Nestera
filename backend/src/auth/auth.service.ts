@@ -4,6 +4,7 @@ import {
   UnauthorizedException,
   BadRequestException,
   Inject,
+  Optional,
   forwardRef,
   Logger,
 } from '@nestjs/common';
@@ -18,6 +19,11 @@ import {
   LinkWalletDto,
   RefreshTokenDto,
 } from './dto/auth.dto';
+import { AuditLogService } from '../common/services/audit-log.service';
+import {
+  AuditAction,
+  AuditResourceType,
+} from '../common/entities/audit-log.entity';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { Cache } from 'cache-manager';
 import * as bcrypt from 'bcrypt';
@@ -54,6 +60,7 @@ export class AuthService {
     @InjectRepository(User)
     private readonly userRepository: Repository<User>,
     private readonly configService: ConfigService,
+    @Optional() private readonly auditLogService?: AuditLogService,
   ) {}
 
   async register(dto: RegisterDto, ip?: string, userAgent?: string) {
@@ -112,6 +119,16 @@ export class AuthService {
     if (!user) {
       // Record failed attempt
       await this.handleFailedLogin(dto.email, ip);
+      void this.auditLogService?.log({
+        action: AuditAction.LOGIN,
+        actor: dto.email,
+        resourceType: AuditResourceType.USER,
+        success: false,
+        errorMessage: 'Invalid credentials',
+        ipAddress: ip,
+        userAgent,
+        description: 'User login failed - invalid credentials',
+      });
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -160,6 +177,17 @@ export class AuthService {
 
     // Update last login
     await this.userService.update(user.id, { lastLoginAt: new Date() });
+
+    void this.auditLogService?.log({
+      action: AuditAction.LOGIN,
+      actor: user.email,
+      resourceType: AuditResourceType.USER,
+      resourceId: user.id,
+      success: true,
+      ipAddress: ip,
+      userAgent,
+      description: 'User login successful',
+    });
 
     return {
       accessToken,
@@ -732,7 +760,20 @@ export class AuthService {
       { userId, isRevoked: false },
       { isRevoked: true },
     );
-    return result.affected || 0;
+    const count = result.affected || 0;
+
+    if (count > 0) {
+      void this.auditLogService?.log({
+        action: AuditAction.LOGOUT,
+        actor: userId,
+        resourceType: AuditResourceType.USER,
+        resourceId: userId,
+        success: true,
+        description: `User logged out — ${count} session(s) revoked`,
+      });
+    }
+
+    return count;
   }
 
   async revokeUserSessionsByDevice(

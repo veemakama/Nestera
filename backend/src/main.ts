@@ -16,6 +16,9 @@ import { VersionAnalyticsInterceptor } from './common/versioning/version-analyti
 import { VersionAnalyticsService } from './common/versioning/version-analytics.service';
 import { GracefulShutdownService } from './common/services/graceful-shutdown.service';
 import { createSecurityHeadersMiddleware } from './common/middleware/security-headers.middleware';
+import { PageDto } from './common/dto/page.dto';
+import { PageMetaDto } from './common/dto/page-meta.dto';
+import { TransactionResponseDto } from './modules/transactions/dto/transaction-response.dto';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bufferLogs: true });
@@ -74,19 +77,48 @@ async function bootstrap() {
 
   // Swagger setup — one document per supported version
   for (const version of ['1', '2']) {
-    const deprecation = DEPRECATED_VERSIONS[version];
+    const isDeprecated = version === '1';
     const swaggerConfig = new DocumentBuilder()
-      .setTitle(`Nestera API v${version}`)
+      .setTitle('Nestera API')
       .setDescription(
-        version === '1'
-          ? 'API v1 — DEPRECATED. Sunset: 2026-09-01. Migrate to v2.'
-          : 'API v2 — Current stable version.',
+        isDeprecated
+          ? '**⚠️ DEPRECATED — Sunset: 2026-09-01. Migrate to v2.**\n\nNestera is a decentralized savings & investment platform on Stellar. All amounts are in USDC (7 decimal places).'
+          : 'Nestera is a decentralized savings & investment platform on Stellar. All amounts are in USDC (7 decimal places).',
       )
       .setVersion(version)
-      .addBearerAuth()
+      .setContact(
+        'Nestera Team',
+        'https://github.com/Devsol-01/Nestera',
+        'support@nestera.io',
+      )
+      .setLicense('MIT', 'https://opensource.org/licenses/MIT')
+      .addServer(`http://localhost:${port || 3001}`, 'Local development')
+      .addServer('https://api.nestera.io', 'Production')
+      .addBearerAuth(
+        {
+          type: 'http',
+          scheme: 'bearer',
+          bearerFormat: 'JWT',
+          description: 'Enter your JWT access token',
+        },
+        'access-token',
+      )
       .build();
-    const document = SwaggerModule.createDocument(app, swaggerConfig);
-    SwaggerModule.setup(`api/v${version}/docs`, app, document);
+    const document = SwaggerModule.createDocument(app, swaggerConfig, {
+      extraModels: [PageDto, PageMetaDto, TransactionResponseDto],
+    });
+    SwaggerModule.setup(`api/v${version}/docs`, app, document, {
+      swaggerOptions: {
+        persistAuthorization: true,
+        tagsSorter: 'alpha',
+        operationsSorter: 'alpha',
+        docExpansion: 'none',
+        filter: true,
+        showRequestDuration: true,
+        tryItOutEnabled: true,
+      },
+      customSiteTitle: `Nestera API v${version} Docs`,
+    });
   }
 
   const server = await app.listen(port || 3001);

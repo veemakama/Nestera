@@ -99,6 +99,24 @@ export default () => ({
       10,
     ),
   },
+  audit: {
+    retentionDays: parseInt(process.env.AUDIT_RETENTION_DAYS ?? '90', 10),
+    archivePath: process.env.AUDIT_ARCHIVE_PATH || '/var/archive/audit-logs',
+    archivalBatchSize: parseInt(
+      process.env.AUDIT_ARCHIVAL_BATCH_SIZE ?? '10000',
+      10,
+    ),
+    compression: {
+      enabled: process.env.AUDIT_COMPRESSION_ENABLED !== 'false',
+    },
+    coldStorage: {
+      enabled: process.env.AUDIT_COLD_STORAGE_ENABLED === 'true',
+      s3Bucket: process.env.AUDIT_S3_BUCKET,
+      region: process.env.AUDIT_S3_REGION ?? 'us-east-1',
+      awsAccessKeyId: process.env.AUDIT_AWS_ACCESS_KEY_ID,
+      awsSecretAccessKey: process.env.AUDIT_AWS_SECRET_ACCESS_KEY,
+    },
+  },
   balanceSync: {
     cacheTtlSeconds: parseInt(
       process.env.BALANCE_CACHE_TTL_SECONDS || '300',

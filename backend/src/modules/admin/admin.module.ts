@@ -14,14 +14,11 @@ import { AdminWaitlistController } from './admin-waitlist.controller';
 import { AdminUsersController } from './admin-users.controller';
 import { AdminWithdrawalController } from './admin-withdrawal.controller';
 import { AdminWithdrawalService } from './admin-withdrawal.service';
-
 import { CircuitBreakerController } from './circuit-breaker.controller';
 import { AdminDisputesController } from './admin-disputes.controller';
 import { AdminAuditLogsController } from './admin-audit-logs.controller';
 import { AdminNotificationsController } from './admin-notifications.controller';
-
 import { AdminTransactionsController } from './admin-transactions.controller';
-
 import { AdminUsersService } from './admin-users.service';
 import { AdminSavingsService } from './admin-savings.service';
 import { AdminDisputesService } from './admin-disputes.service';
@@ -29,6 +26,7 @@ import { AdminAuditLogsService } from './admin-audit-logs.service';
 import { AdminAuditLogsArchivalService } from './admin-audit-logs-archival.service';
 import { AdminNotificationsService } from './admin-notifications.service';
 import { AdminTransactionsService } from './admin-transactions.service';
+import { AuditLogService } from '../../common/services/audit-log.service';
 import { AdminTransactionNote } from './entities/admin-transaction-note.entity';
 import { User } from '../user/entities/user.entity';
 import { UserSubscription } from '../savings/entities/user-subscription.entity';
@@ -53,7 +51,6 @@ import { Notification } from '../notifications/entities/notification.entity';
       AdminTransactionNote,
       Dispute,
       DisputeTimeline,
-      AuditLog,
       Notification,
     ]),
     UserModule,
@@ -71,6 +68,11 @@ import { Notification } from '../notifications/entities/notification.entity';
     AdminWaitlistController,
     AdminUsersController,
     AdminWithdrawalController,
+    CircuitBreakerController,
+    AdminDisputesController,
+    AdminAuditLogsController,
+    AdminNotificationsController,
+    AdminTransactionsController,
   ],
   providers: [
     AdminUsersService,
@@ -81,11 +83,13 @@ import { Notification } from '../notifications/entities/notification.entity';
     AdminNotificationsService,
     AdminTransactionsService,
     AdminWithdrawalService,
+    AuditLogService,
   ],
   exports: [
     AdminDisputesService,
     AdminAuditLogsService,
     AdminAuditLogsArchivalService,
+    AuditLogService,
   ],
 })
 export class AdminModule {}
