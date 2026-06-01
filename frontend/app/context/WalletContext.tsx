@@ -17,6 +17,7 @@ import {
 } from "@stellar/freighter-api";
 import { Horizon } from "@stellar/stellar-sdk";
 import { env } from "../lib/env";
+import { usePrices, getAssetPrice } from "../hooks/usePrices";
 
 interface Balance {
   asset_code: string;
@@ -47,12 +48,6 @@ interface WalletContextValue extends WalletState {
 
 const WalletContext = createContext<WalletContextValue | null>(null);
 
-const COINGECKO_IDS: Record<string, string> = {
-  XLM: "stellar",
-  USDC: "usd-coin",
-  AQUA: "aqua",
-};
-
 export function WalletProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<WalletState>({
     address: null,
@@ -70,6 +65,9 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   const refreshInterval = useRef<NodeJS.Timeout | null>(null);
   const networkWatcher = useRef<WatchWalletChanges | null>(null);
 
+  // Use React Query for cached prices (updates every 5 minutes)
+  const { data: prices } = usePrices();
+
   const getHorizonUrl = (network: string | null) => {
     return network?.toLowerCase() === "public"
       ? env.horizonPublic
@@ -86,18 +84,10 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       const server = new Horizon.Server(horizonUrl);
       const account = await server.loadAccount(state.address);
 
-      // Fetch prices
-      const assetIds = Object.values(COINGECKO_IDS).join(",");
-      const priceRes = await fetch(
-        `${env.coingeckoApi}/simple/price?ids=${assetIds}&vs_currencies=usd`
-      );
-      const prices = await priceRes.json();
-
       let totalUsd = 0;
       const balances: Balance[] = account.balances.map((b: any) => {
         const code = b.asset_type === "native" ? "XLM" : b.asset_code;
-        const coingeckoId = COINGECKO_IDS[code];
-        const price = prices[coingeckoId]?.usd || (code === "USDC" ? 1 : 0);
+        const price = getAssetPrice(prices, code);
         const usdValue = parseFloat(b.balance) * price;
         totalUsd += usdValue;
 
@@ -127,7 +117,7 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
           err instanceof Error ? err.message : "Unable to refresh wallet balances.",
       }));
     }
-  }, [state.address, state.network]);
+  }, [state.address, state.network, prices]);
 
   // Restore session on mount
   useEffect(() => {
@@ -156,12 +146,12 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     })();
   }, []);
 
-  // Fetch balances when address changes
+  // Fetch balances when address changes (prices come from React Query cache)
   useEffect(() => {
     if (state.address) {
       fetchBalances();
 
-      // Real-time updates every 30 seconds
+      // Poll balances every 30 seconds (prices are cached separately)
       if (refreshInterval.current) clearInterval(refreshInterval.current);
       refreshInterval.current = setInterval(fetchBalances, 30000);
     } else {
@@ -187,7 +177,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
   // Watch for network changes when wallet is connected
   useEffect(() => {
     if (!state.isConnected) {
-      // Clean up watcher when wallet is disconnected
       if (networkWatcher.current) {
         try {
           networkWatcher.current.stop();
@@ -200,7 +189,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
     }
 
     try {
-      // Initialize watcher to poll every 3 seconds
       networkWatcher.current = new WatchWalletChanges(3000);
 
       networkWatcher.current.watch((changes) => {
@@ -215,7 +203,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
       console.error("Failed to initialize network watcher:", error);
     }
 
-    // Cleanup function
     return () => {
       if (networkWatcher.current) {
         try {
