@@ -3,6 +3,7 @@
 import React, { useState } from "react";
 import { Users, Copy, Check, Trophy, Gift, TrendingUp } from "lucide-react";
 import { env } from "../../lib/env";
+import Button from "../../components/ui/Button";
 
 const REFERRED_USERS = [
   { name: "Alice K.", joined: "Apr 20, 2026", status: "Active", reward: "$12.00" },
@@ -71,13 +72,14 @@ export default function ReferralsPage() {
           <div className="flex-1 px-4 py-2.5 rounded-xl bg-white/5 border border-white/8 text-sm text-[#8cc0c7] font-mono truncate">
             {REFERRAL_LINK}
           </div>
-          <button
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={copy}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-cyan-500/15 border border-cyan-500/25 text-cyan-300 text-sm font-medium hover:bg-cyan-500/25 transition-colors cursor-pointer shrink-0"
+            leftIcon={copied ? <Check size={15} /> : <Copy size={15} />}
           >
-            {copied ? <Check size={15} /> : <Copy size={15} />}
             {copied ? "Copied!" : "Copy"}
-          </button>
+          </Button>
         </div>
         <p className="text-xs text-[#4a7080] mt-3 m-0">
           Earn $12 USDC for every friend who deposits at least $100.

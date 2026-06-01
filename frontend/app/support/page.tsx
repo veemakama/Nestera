@@ -11,6 +11,7 @@ import {
   ChevronUp,
   Send,
 } from "lucide-react";
+import Button from "../components/ui/Button";
 
 const FAQS = [
   { q: "How do I connect my Freighter wallet?", a: "Install the Freighter browser extension, switch it to Testnet, then click 'Connect Wallet' on the dashboard. Ensure NEXT_PUBLIC_STELLAR_NETWORK=testnet in your .env.local." },
@@ -155,13 +156,13 @@ export default function SupportPage() {
                     placeholder="Describe your issue…"
                   />
                 </div>
-                <button
+                <Button
                   type="submit"
-                  className="flex items-center justify-center gap-2 py-2.5 rounded-xl bg-cyan-500/20 border border-cyan-500/30 text-cyan-300 text-sm font-semibold hover:bg-cyan-500/30 transition-colors cursor-pointer"
+                  variant="secondary"
+                  leftIcon={<Send size={14} />}
                 >
-                  <Send size={14} />
                   Send Message
-                </button>
+                </Button>
               </form>
             )}
           </div>

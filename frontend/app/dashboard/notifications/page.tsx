@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { Bell, CheckCheck, ArrowUpRight, ShieldCheck, Target, Megaphone } from "lucide-react";
+import Button from "../../../components/ui/Button";
 
 type NotifType = "transaction" | "governance" | "milestone" | "announcement";
 
@@ -77,13 +78,14 @@ export default function NotificationsPage() {
           </div>
         </div>
         {unread > 0 && (
-          <button
+          <Button
+            variant="secondary"
+            size="sm"
             onClick={markAllRead}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl border border-cyan-500/20 bg-cyan-500/10 text-cyan-300 text-sm font-medium hover:bg-cyan-500/20 transition-colors cursor-pointer"
+            leftIcon={<CheckCheck size={15} />}
           >
-            <CheckCheck size={15} />
             Mark all read
-          </button>
+          </Button>
         )}
       </div>
 

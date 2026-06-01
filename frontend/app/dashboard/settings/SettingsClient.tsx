@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { Monitor, Moon, Settings, Sun } from "lucide-react";
 import { type Theme, useTheme } from "../../context/ThemeContext";
+import Button from "../../components/ui/Button";
 
 type Prefs = {
   emailNotifications?: boolean;
@@ -177,13 +178,15 @@ export default function SettingsClient() {
             />
 
             <div className="text-right">
-              <button
-                className="rounded-xl bg-[var(--color-accent)] px-4 py-2 text-sm font-semibold text-[#061a1a] hover:brightness-105 disabled:cursor-not-allowed disabled:opacity-70"
+              <Button
+                variant="primary"
+                size="sm"
                 onClick={save}
                 disabled={saving}
+                loading={saving}
               >
-                {saving ? "Saving..." : "Save Preferences"}
-              </button>
+                Save Preferences
+              </Button>
             </div>
           </div>
         </section>

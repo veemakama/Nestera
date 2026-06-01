@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import { Briefcase, TrendingUp, TrendingDown, Download, MoreHorizontal } from "lucide-react";
+import Button from "../../components/ui/Button";
 
 const ASSETS = [
   { name: "USDC Flexible", type: "Savings", balance: 2400, value: 2400, apy: 6.5, pnl: 156, pnlPct: 6.9 },
@@ -66,14 +67,16 @@ export default function PortfolioPage() {
             <p className="text-[#5e8c96] text-sm m-0">All assets and positions</p>
           </div>
         </div>
-        <button
+        <Button
+          variant="secondary"
+          size="sm"
           onClick={handleExport}
           disabled={exporting}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl border border-cyan-500/20 bg-cyan-500/10 text-cyan-300 text-sm font-medium hover:bg-cyan-500/20 transition-colors cursor-pointer disabled:opacity-50"
+          loading={exporting}
+          leftIcon={<Download size={15} />}
         >
-          <Download size={15} />
-          {exporting ? "Exporting…" : "Export CSV"}
-        </button>
+          Export CSV
+        </Button>
       </div>
 
       {/* Summary cards */}

@@ -117,6 +117,21 @@ export default () => ({
       awsSecretAccessKey: process.env.AUDIT_AWS_SECRET_ACCESS_KEY,
     },
   },
+  cors: {
+    enabled: process.env.CORS_ENABLED !== 'false',
+    origins: (process.env.CORS_ORIGINS || 'http://localhost:3000')
+      .split(',')
+      .map((o) => o.trim())
+      .filter(Boolean),
+    methods: (
+      process.env.CORS_METHODS || 'GET,HEAD,PUT,PATCH,POST,DELETE,OPTIONS'
+    ).split(','),
+    allowedHeaders: (
+      process.env.CORS_ALLOWED_HEADERS || 'Content-Type,Authorization,Accept'
+    ).split(','),
+    credentials: process.env.CORS_CREDENTIALS === 'true',
+    maxAge: parseInt(process.env.CORS_MAX_AGE || '86400', 10),
+  },
   balanceSync: {
     cacheTtlSeconds: parseInt(
       process.env.BALANCE_CACHE_TTL_SECONDS || '300',

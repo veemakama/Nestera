@@ -53,14 +53,20 @@ export const envValidationSchema = Joi.object({
   BACKUP_S3_REGION: Joi.string().optional(),
   BACKUP_AWS_ACCESS_KEY_ID: Joi.string().optional(),
   BACKUP_AWS_SECRET_ACCESS_KEY: Joi.string().optional(),
-  BACKUP_ENCRYPTION_KEY: Joi.string()
-    .length(64)
-    .hex()
-    .optional(),
+  BACKUP_ENCRYPTION_KEY: Joi.string().length(64).hex().optional(),
   BACKUP_RETENTION_DAYS: Joi.number().integer().min(1).default(30).optional(),
   BACKUP_TMP_DIR: Joi.string().optional(),
   BACKUP_TEST_DB_HOST: Joi.string().hostname().optional(),
   BACKUP_TEST_DB_PORT: Joi.number().port().default(5432).optional(),
   BACKUP_TEST_DB_USER: Joi.string().optional(),
   BACKUP_TEST_DB_PASSWORD: Joi.string().optional(),
-  BACKUP_TEST_DB_NAME: Joi.string().default('nestera_restore_test').optional(),}).or('DATABASE_URL', 'DB_HOST'); // enforce at least one DB connection strategy
+  BACKUP_TEST_DB_NAME: Joi.string().default('nestera_restore_test').optional(),
+
+  // ── CORS ───────────────────────────────────────────────────────────────────
+  CORS_ENABLED: Joi.boolean().default(true).optional(),
+  CORS_ORIGINS: Joi.string().optional(),
+  CORS_METHODS: Joi.string().optional(),
+  CORS_ALLOWED_HEADERS: Joi.string().optional(),
+  CORS_CREDENTIALS: Joi.boolean().default(true).optional(),
+  CORS_MAX_AGE: Joi.number().integer().min(0).default(86400).optional(),
+}).or('DATABASE_URL', 'DB_HOST'); // enforce at least one DB connection strategy

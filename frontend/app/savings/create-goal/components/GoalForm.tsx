@@ -2,6 +2,7 @@
 
 import React from "react";
 import { Calendar, CircleDollarSign, Flag, Sparkles } from "lucide-react";
+import Button from "../../../components/ui/Button";
 
 type FormState = {
   goalName: string;
@@ -173,12 +174,9 @@ export default function GoalForm() {
               )}
 
               <div className="flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between pt-2">
-                <button
-                  type="submit"
-                  className="px-5 py-3 bg-cyan-500 hover:bg-cyan-400 text-[#061a1a] font-bold rounded-2xl transition-all shadow-[0_10px_20px_rgba(0,212,192,0.2)] active:scale-95"
-                >
+                <Button type="submit" variant="primary" size="lg">
                   Create goal
-                </button>
+                </Button>
                 <p className="text-[#6a8a93] text-xs m-0">
                   You’ll be able to contribute and track progress on the dashboard.
                 </p>

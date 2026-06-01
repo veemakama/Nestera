@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import Button from "../ui/Button";
 
 export type RiskLevel = "Low Risk" | "Medium Risk" | "High Risk";
 
@@ -106,12 +107,13 @@ const SavingsPoolCard: React.FC<SavingsPoolCardProps> = ({
       </div>
 
       {/* Deposit Button */}
-      <button
+      <Button
+        variant="outline"
+        fullWidth
         onClick={() => onDeposit?.(pool.id)}
-        className="w-full py-3 bg-transparent border border-cyan-500/30 text-cyan-400 rounded-xl font-semibold hover:bg-cyan-500/10 hover:border-cyan-500/50 transition-all duration-200 active:scale-[0.98] group-hover:border-cyan-500/50"
       >
         Deposit
-      </button>
+      </Button>
     </div>
   );
 };

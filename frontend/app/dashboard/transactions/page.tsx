@@ -4,6 +4,7 @@ import React, { useEffect, useState } from "react";
 import { Download, History, Loader2, Search, ChevronDown } from "lucide-react";
 import TransactionRow, { TransactionType, TransactionStatus } from "./components/TransactionRow";
 import { useToast } from "../../context/ToastContext";
+import Button from "../../components/ui/Button";
 
 type TransactionRowData = {
   date: string;
@@ -134,13 +135,14 @@ export default function TransactionHistoryPage() {
           </div>
         </div>
 
-        <button
+        <Button
+          variant="primary"
+          size="md"
           onClick={onExportCsv}
-          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-cyan-500 px-5 py-2.5 font-bold text-[#061a1a] shadow-lg transition-all hover:bg-cyan-400 active:scale-95"
+          leftIcon={<Download size={18} />}
         >
-          <Download size={18} />
           Export CSV
-        </button>
+        </Button>
       </div>
 
       <div className="flex flex-wrap items-center gap-4 mb-6">
