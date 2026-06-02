@@ -14,6 +14,7 @@ import { usePrices, getAssetPrice } from "../hooks/usePrices";
 import { env } from "../lib/env";
 import { queryClient } from "./QueryProvider";
 import { rateLimitedFetch } from "../lib/api-client";
+import { captureWalletError, addBreadcrumb } from "../lib/monitoring";
 
 interface Balance {
   asset_code: string;
@@ -126,6 +127,13 @@ const refreshInterval = useRef<ReturnType<typeof setInterval> | null>(null);
 
     setState((s) => ({ ...s, isBalancesLoading: true, balanceError: null }));
 
+    addBreadcrumb({
+      message: "Fetching wallet balances",
+      category: "wallet",
+      data: { network: state.network },
+      level: "info",
+    });
+
     try {
       const horizonUrl = getHorizonUrl(state.network).replace(/\/$/, "");
       const res = await rateLimitedFetch(`${horizonUrl}/accounts/${state.address}`);
@@ -160,6 +168,7 @@ const refreshInterval = useRef<ReturnType<typeof setInterval> | null>(null);
         lastBalanceSync: Date.now(),
       }));
     } catch (error) {
+      captureWalletError(error, "fetchBalances", state.address);
       setState((s) => ({
         ...s,
         isBalancesLoading: false,
@@ -283,9 +292,17 @@ const refreshInterval = useRef<ReturnType<typeof setInterval> | null>(null);
   const connect = useCallback(async () => {
     setState((s) => ({ ...s, isLoading: true, error: null, connectionStatus: "connecting" }));
 
+    addBreadcrumb({
+      message: "Wallet connect initiated",
+      category: "wallet",
+      level: "info",
+    });
+
     try {
       if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current);
       connectTimeoutRef.current = setTimeout(() => {
+        const timeoutError = new Error("Connection timed out");
+        captureWalletError(timeoutError, "connect_timeout");
         setState((s) => ({
           ...s,
           isLoading: false,
@@ -304,6 +321,7 @@ const refreshInterval = useRef<ReturnType<typeof setInterval> | null>(null);
       if (accessError) {
         if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current);
         connectTimeoutRef.current = null;
+        captureWalletError(new Error(accessError), "connect_rejected");
         setState((s) => ({
           ...s,
           isLoading: false,
@@ -323,6 +341,13 @@ const refreshInterval = useRef<ReturnType<typeof setInterval> | null>(null);
       const network = walletNetwork ?? null;
       if (network) localStorage.setItem(STORAGE_KEY, network);
 
+      addBreadcrumb({
+        message: "Wallet connected successfully",
+        category: "wallet",
+        data: { network },
+        level: "info",
+      });
+
       setState((s) => ({
         ...s,
         address,
@@ -336,6 +361,7 @@ const refreshInterval = useRef<ReturnType<typeof setInterval> | null>(null);
     } catch (error) {
       if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current);
       connectTimeoutRef.current = null;
+      captureWalletError(error, "connect");
       setState((s) => ({
         ...s,
         isLoading: false,

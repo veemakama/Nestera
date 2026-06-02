@@ -1,4 +1,4 @@
-import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
 import { BullModule } from '@nestjs/bull';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { ScheduleModule } from '@nestjs/schedule';
@@ -49,7 +49,9 @@ import { PostmanModule } from './common/postman/postman.module';
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
 import { JobsModule } from './modules/jobs/jobs.module';
 import { GracefulShutdownService } from './common/services/graceful-shutdown.service';
+import { ApmModule } from './modules/apm/apm.module';
 import { PerformanceModule } from './modules/performance/performance.module';
+import { FeatureFlagsModule } from './modules/feature-flags/feature-flags.module';
 
 const envValidationSchema = Joi.object({
   NODE_ENV: Joi.string().valid('development', 'production', 'test').required(),
@@ -96,10 +98,112 @@ const envValidationSchema = Joi.object({
   BACKUP_ENCRYPTION_KEY: Joi.string().length(64).optional(), // 32-byte key as hex
   BACKUP_RETENTION_DAYS: Joi.number().integer().min(1).default(30).optional(),
   BACKUP_TMP_DIR: Joi.string().optional(),
+
+  LOG_DIR: Joi.string().optional(),
+  LOG_RETENTION_DAYS: Joi.number().integer().min(1).default(30).optional(),
 });
 
 @Module({
   imports: [
+    LoggerModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (configService: ConfigService) => {
+        const isProduction =
+          configService.get<string>('NODE_ENV') === 'production';
+        const logLevel = isProduction ? 'info' : 'debug';
+
+        return {
+          pinoHttp: {
+            level: logLevel,
+            // Attach correlationId from request to every log line
+            customProps: (req: import('http').IncomingMessage) => ({
+              correlationId:
+                (req as import('http').IncomingMessage & { correlationId?: string })
+                  .correlationId ||
+                req.headers['x-correlation-id'] ||
+                'unknown',
+            }),
+            // Redact sensitive fields from pino-http auto-logging
+            redact: {
+              paths: [
+                'req.headers.authorization',
+                'req.headers.cookie',
+                'req.headers["x-api-key"]',
+                'req.body.password',
+                'req.body.secret',
+                'req.body.token',
+                'req.body.privateKey',
+                'req.body.secretKey',
+                'req.body.mnemonic',
+                'res.headers["set-cookie"]',
+              ],
+              censor: '[REDACTED]',
+            },
+            // Serializers for structured output
+            serializers: {
+              req: (req) => ({
+                id: req.id,
+                method: req.method,
+                url: req.url,
+                remoteAddress: req.remoteAddress,
+                userAgent: req.headers?.['user-agent'],
+              }),
+              res: (res) => ({
+                statusCode: res.statusCode,
+              }),
+              err: (err) => ({
+                type: err.type,
+                message: err.message,
+                stack: isProduction ? undefined : err.stack,
+              }),
+            },
+            transport: isProduction
+              ? (() => {
+                  const logDir = configService.get<string>('LOG_DIR');
+                  const retentionDays = configService.get<number>('LOG_RETENTION_DAYS') ?? 30;
+                  // File transport for log retention when LOG_DIR is set
+                  if (logDir) {
+                    return {
+                      targets: [
+                        {
+                          target: 'pino/file',
+                          options: {
+                            destination: `${logDir}/app.log`,
+                            mkdir: true,
+                          },
+                          level: logLevel,
+                        },
+                      ],
+                    };
+                  }
+                  // No transport in production without LOG_DIR (stdout JSON)
+                  void retentionDays;
+                  return undefined;
+                })()
+              : {
+                  target: 'pino-pretty',
+                  options: {
+                    singleLine: true,
+                    colorize: true,
+                    translateTime: 'yyyy-mm-dd HH:MM:ss',
+                    ignore: 'pid,hostname',
+                    messageFormat: '[{correlationId}] {msg}',
+                  },
+                },
+          },
+        };
+      },
+    }),
+    BullModule.forRootAsync({
+      imports: [ConfigModule],
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        redis: {
+          uri: config.get<string>('REDIS_URL') || 'redis://localhost:6379',
+        },
+      }),
+    }),
     ConfigModule.forRoot({
       isGlobal: true,
       load: [configuration],
@@ -219,6 +323,8 @@ const envValidationSchema = Joi.object({
     CircuitBreakerModule,
     PostmanModule,
     PerformanceModule,
+    ApmModule,
+    FeatureFlagsModule,
     JobsModule,
     CommonModule,
     ThrottlerModule.forRoot([

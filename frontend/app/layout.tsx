@@ -4,6 +4,7 @@ import { headers } from "next/headers";
 import { Suspense } from "react";
 import IntlProvider from "./i18n/provider";
 import AnalyticsProvider from "./components/AnalyticsProvider";
+import MonitoringProvider from "./components/MonitoringProvider";
 import { StructuredData } from "./components/StructuredData";
 import {
   generatePageMetadata,
@@ -72,6 +73,7 @@ export default async function RootLayout({
           {children}
           <Suspense fallback={null}>
             <AnalyticsProvider />
+            <MonitoringProvider />
           </Suspense>
         </IntlProvider>
       </body>
