@@ -16,6 +16,23 @@ pub struct TokenMetadata {
     pub treasury: Address,
 }
 
+/// Event emitted when tokens are minted
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TokenMinted {
+    pub to: Address,
+    pub amount: i128,
+    pub new_total_supply: i128,
+}
+
+/// Event emitted when tokens are burned
+#[contracttype]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct TokenBurned {
+    pub from: Address,
+    pub amount: i128,
+    pub new_total_supply: i128,
+}
 
 /// Initializes the protocol token metadata and assigns total supply to the treasury.
 ///
@@ -51,8 +68,8 @@ pub fn initialize_token(
         .set(&DataKey::TokenMetadata, &metadata);
 
     env.events().publish(
-        (),
-        crate::events::ProtocolEvent::Mint(treasury, total_supply),
+        (symbol_short!("token"), symbol_short!("init"), treasury),
+        total_supply,
     );
 
     Ok(())
@@ -99,7 +116,14 @@ pub fn mint(env: &Env, to: Address, amount: i128) -> Result<i128, SavingsError> 
         .instance()
         .set(&DataKey::TokenMetadata, &metadata);
 
-    env.events().publish((), crate::events::ProtocolEvent::Mint(to, amount));
+    // Emit TokenMinted event
+    let event = TokenMinted {
+        to: to.clone(),
+        amount,
+        new_total_supply: metadata.total_supply,
+    };
+    env.events()
+        .publish((symbol_short!("token"), symbol_short!("mint"), to), event);
 
     Ok(metadata.total_supply)
 }
@@ -143,7 +167,14 @@ pub fn burn(env: &Env, from: Address, amount: i128) -> Result<i128, SavingsError
         .instance()
         .set(&DataKey::TokenMetadata, &metadata);
 
-    env.events().publish((), crate::events::ProtocolEvent::Burn(from, amount));
+    // Emit TokenBurned event
+    let event = TokenBurned {
+        from: from.clone(),
+        amount,
+        new_total_supply: metadata.total_supply,
+    };
+    env.events()
+        .publish((symbol_short!("token"), symbol_short!("burn"), from), event);
 
     Ok(metadata.total_supply)
 }

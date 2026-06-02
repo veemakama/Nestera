@@ -8,8 +8,6 @@ import { AuditLogInterceptor } from './common/interceptors/audit-log.interceptor
 import { RequestLoggingInterceptor } from './common/interceptors/request-logging.interceptor';
 import { GracefulShutdownInterceptor } from './common/interceptors/graceful-shutdown.interceptor';
 import { TieredThrottlerGuard } from './common/guards/tiered-throttler.guard';
-import { ApmModule } from './modules/apm/apm.module';
-import { ApmInterceptor } from './modules/apm/apm.interceptor';
 import { CommonModule } from './common/common.module';
 import { EventEmitterModule } from '@nestjs/event-emitter';
 import { LoggerModule } from 'nestjs-pino';
@@ -39,7 +37,6 @@ import { NotificationsModule } from './modules/notifications/notifications.modul
 import { TransactionsModule } from './modules/transactions/transactions.module';
 import { ReportsModule } from './modules/reports/reports.module';
 import { ReferralsModule } from './modules/referrals/referrals.module';
-import { RewardsModule } from './modules/rewards/rewards.module';
 import { TestRbacModule } from './test-rbac/test-rbac.module';
 import { TestThrottlingModule } from './test-throttling/test-throttling.module';
 import { ApiVersioningModule } from './common/versioning/api-versioning.module';
@@ -49,7 +46,6 @@ import { ConnectionPoolModule } from './common/database/connection-pool.module';
 import { CircuitBreakerModule } from './common/circuit-breaker/circuit-breaker.module';
 import { PostmanModule } from './common/postman/postman.module';
 import { CorrelationIdMiddleware } from './common/middleware/correlation-id.middleware';
-import { RequestValidationMiddleware } from './common/middleware/validation.middleware';
 import { PerformanceModule } from './modules/performance/performance.module';
 import { GracefulShutdownService } from './common/services/graceful-shutdown.service';
 
@@ -98,10 +94,6 @@ const envValidationSchema = Joi.object({
   BACKUP_ENCRYPTION_KEY: Joi.string().length(64).optional(), // 32-byte key as hex
   BACKUP_RETENTION_DAYS: Joi.number().integer().min(1).default(30).optional(),
   BACKUP_TMP_DIR: Joi.string().optional(),
-
-  APM_SAMPLING_RATE: Joi.number().min(0).max(1).default(1.0).optional(),
-  APM_ENABLED: Joi.boolean().default(true).optional(),
-  ALLOWED_ORIGINS: Joi.string().optional(),
 });
 
 @Module({
@@ -156,30 +148,6 @@ const envValidationSchema = Joi.object({
       useFactory: (configService: ConfigService) => {
         const dbUrl = configService.get<string>('database.url');
         const dbHost = configService.get<string>('database.host');
-        const isProduction = configService.get<string>('NODE_ENV') === 'production';
-        const redisUrl = configService.get<string>('REDIS_URL');
-
-        const poolConfig = {
-          max: configService.get<number>('DATABASE_POOL_MAX', isProduction ? 30 : 10),
-          min: configService.get<number>('DATABASE_POOL_MIN', isProduction ? 5 : 2),
-          idleTimeoutMillis: configService.get<number>('DATABASE_IDLE_TIMEOUT', 30000),
-          connectionTimeoutMillis: configService.get<number>('DATABASE_CONNECTION_TIMEOUT', 2000),
-          statement_timeout: 30000,
-          query_timeout: 30000,
-          validationQuery: 'SELECT 1',
-          validateConnection: true,
-        };
-
-        const cacheConfig = redisUrl
-          ? {
-              type: 'redis' as const,
-              options: { url: redisUrl },
-              duration: 30000,
-            }
-          : {
-              type: 'database' as const,
-              duration: 30000,
-            };
 
         if (dbUrl) {
           // URL-based connection (e.g. DATABASE_URL on cloud platforms)
@@ -188,9 +156,6 @@ const envValidationSchema = Joi.object({
             url: dbUrl,
             autoLoadEntities: true,
             synchronize: configService.get<string>('NODE_ENV') !== 'production',
-            extra: poolConfig,
-            cache: cacheConfig,
-            maxQueryExecutionTime: 100, // Monitor and log queries exceeding 100ms
           };
         }
 
@@ -210,9 +175,6 @@ const envValidationSchema = Joi.object({
           password: configService.get<string>('database.pass'),
           autoLoadEntities: true,
           synchronize: configService.get<string>('NODE_ENV') !== 'production',
-          extra: poolConfig,
-          cache: cacheConfig,
-          maxQueryExecutionTime: 100, // Monitor and log queries exceeding 100ms
         };
       },
     }),
@@ -238,7 +200,6 @@ const envValidationSchema = Joi.object({
     TransactionsModule,
     ReportsModule,
     ReferralsModule,
-    RewardsModule,
     TestRbacModule,
     TestThrottlingModule,
     ApiVersioningModule,
@@ -246,7 +207,6 @@ const envValidationSchema = Joi.object({
     DataExportModule,
     ConnectionPoolModule,
     CircuitBreakerModule,
-    ApmModule,
     PostmanModule,
     PerformanceModule,
     CommonModule,
@@ -292,15 +252,10 @@ const envValidationSchema = Joi.object({
       provide: APP_INTERCEPTOR,
       useClass: GracefulShutdownInterceptor,
     },
-    {
-      provide: APP_INTERCEPTOR,
-      useClass: ApmInterceptor,
-    },
   ],
 })
 export class AppModule {
   configure(consumer: MiddlewareConsumer) {
     consumer.apply(CorrelationIdMiddleware).forRoutes('*');
-    consumer.apply(RequestValidationMiddleware).forRoutes('*');
   }
 }

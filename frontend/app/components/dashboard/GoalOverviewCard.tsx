@@ -1,7 +1,6 @@
 "use client";
 
 import React from "react";
-import { Button } from "../ui/Button";
 import {
   Shield,
   Calendar,
@@ -11,7 +10,6 @@ import {
   CheckCircle2,
 } from "lucide-react";
 import CircularProgress from "./CircularProgress";
-import Button from "../ui/Button";
 
 interface Milestone {
   label: string;
@@ -221,30 +219,20 @@ const GoalOverviewCard: React.FC<GoalOverviewCardProps> = ({
 
       {/* ── Action buttons ── */}
       <div className="mt-8 flex flex-wrap gap-3">
-            <Button onClick={onEditGoal} variant="outline" size="md" className="flex items-center gap-2 px-6 py-3 rounded-xl border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] text-white font-semibold text-sm">
-              <Edit3 size={16} />
-              Edit Goal
-            </Button>
-            <Button onClick={onAddFunds} variant="primary" size="md" className="flex items-center gap-2 px-6 py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-[#061a1a] font-bold text-sm shadow-[0_8px_20px_rgba(0,212,192,0.2)] hover:shadow-[0_12px_28px_rgba(0,212,192,0.35)]">
-              <PlusCircle size={16} />
-              Add Funds
-            </Button>
-        <Button
-          variant="ghost"
-          size="md"
+        <button
           onClick={onEditGoal}
-          leftIcon={<Edit3 size={16} />}
+          className="flex items-center gap-2 px-6 py-3 rounded-xl border border-white/10 bg-white/[0.04] hover:bg-white/[0.08] text-white font-semibold text-sm transition-all active:scale-95 cursor-pointer"
         >
+          <Edit3 size={16} />
           Edit Goal
-        </Button>
-        <Button
-          variant="primary"
-          size="md"
+        </button>
+        <button
           onClick={onAddFunds}
-          leftIcon={<PlusCircle size={16} />}
+          className="flex items-center gap-2 px-6 py-3 rounded-xl bg-cyan-500 hover:bg-cyan-400 text-[#061a1a] font-bold text-sm transition-all shadow-[0_8px_20px_rgba(0,212,192,0.2)] hover:shadow-[0_12px_28px_rgba(0,212,192,0.35)] active:scale-95 cursor-pointer"
         >
+          <PlusCircle size={16} />
           Add Funds
-        </Button>
+        </button>
       </div>
     </div>
   );

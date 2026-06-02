@@ -173,8 +173,8 @@ pub fn route_to_strategy(
 
     // Emit event
     env.events().publish(
-        (),
-        crate::events::ProtocolEvent::StratDeposit(strategy_address, amount, shares),
+        (symbol_short!("strat"), symbol_short!("deposit")),
+        (strategy_address, amount, shares),
     );
 
     Ok(shares)
@@ -266,8 +266,8 @@ pub fn withdraw_from_strategy(
     }
 
     env.events().publish(
-        (),
-        crate::events::ProtocolEvent::StratWithdraw(strategy_addr, withdraw_amount, returned),
+        (symbol_short!("strat"), symbol_short!("withdraw")),
+        (strategy_addr, withdraw_amount, returned),
     );
 
     Ok(returned)
@@ -350,8 +350,8 @@ pub fn harvest_strategy(env: &Env, strategy_address: Address) -> Result<i128, Sa
     save_performance(env, &strategy_address, &perf);
 
     env.events().publish(
-        (),
-        crate::events::ProtocolEvent::StratHarvest(
+        (symbol_short!("strat"), symbol_short!("harvest")),
+        (
             strategy_address.clone(),
             actual_yield,
             treasury_fee,
@@ -361,8 +361,8 @@ pub fn harvest_strategy(env: &Env, strategy_address: Address) -> Result<i128, Sa
 
     // Emit dedicated YieldDistributed event for frontend indexers
     env.events().publish(
-        (),
-        crate::events::ProtocolEvent::StratYieldDistributed(
+        (symbol_short!("yld_dist"),),
+        (
             strategy_address.clone(),
             actual_yield,
             treasury_fee,

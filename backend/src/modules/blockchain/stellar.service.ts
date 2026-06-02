@@ -197,6 +197,7 @@ export class StellarService implements OnModuleInit {
     } catch (error) {
       this.logger.error(
         `Failed to fetch events from ledger ${startLedger}: ${(error as Error).message}`,
+        error,
       );
       throw error;
     }
@@ -250,6 +251,7 @@ export class StellarService implements OnModuleInit {
     } catch (error) {
       this.logger.error(
         `Failed to fetch delegation for ${publicKey}: ${(error as Error).message}`,
+        error,
       );
       return null;
     }
@@ -271,23 +273,10 @@ export class StellarService implements OnModuleInit {
    * @param limit     - Maximum number of transactions to return (default 10)
    * @returns         Array of sanitized TransactionDto objects
    */
-  async getRecentTransactions(publicKey: string): Promise<TransactionDto[]>;
   async getRecentTransactions(
     publicKey: string,
-    limit?: number,
-    cursor?: string,
-  ): Promise<
-    | { records: TransactionDto[]; nextCursor: string | null; hasMore: boolean }
-    | TransactionDto[]
-  >;
-  async getRecentTransactions(
-    publicKey: string,
-    limit: number = 10,
-    cursor?: string,
-  ): Promise<
-    | TransactionDto[]
-    | { records: TransactionDto[]; nextCursor: string | null; hasMore: boolean }
-  > {
+    limit = 10,
+  ): Promise<TransactionDto[]> {
     try {
       return await this.rpcClient.executeWithRetry(async (client) => {
         const horizonServer = client as Horizon.Server;
@@ -350,26 +339,12 @@ export class StellarService implements OnModuleInit {
           }),
         );
 
-        // If caller requested pagination via cursor, return pagination object
-        if (cursor) {
-          const hasMore = transactions.length >= limit;
-          const nextCursor =
-            hasMore && results.length > 0
-              ? results[results.length - 1].hash
-              : null;
-
-          return {
-            records: results,
-            nextCursor,
-            hasMore,
-          };
-        }
-
         return results;
       }, 'horizon');
     } catch (error) {
       this.logger.error(
         `Failed to fetch transactions for ${publicKey}: ${(error as Error).message}`,
+        error,
       );
       return [];
     }

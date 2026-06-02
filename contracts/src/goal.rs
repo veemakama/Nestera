@@ -291,8 +291,8 @@ pub fn withdraw_completed_goal_save(
                 .ok_or(SavingsError::Overflow)?;
             env.storage().persistent().set(&fee_key, &new_fee_balance);
             env.events().publish(
-                (),
-                crate::events::GoalEvent::Fee(fee_recipient, goal_id, fee_amount, soroban_sdk::Symbol::new(env, "withdraw")),
+                (symbol_short!("gwth_fee"), fee_recipient, goal_id),
+                fee_amount,
             );
         }
         // Record fee in treasury struct
@@ -385,15 +385,15 @@ pub fn break_goal_save(env: &Env, user: Address, goal_id: u64) -> Result<i128, S
             ttl::extend_config_ttl(env, &fee_key);
 
             env.events().publish(
-                (),
-                crate::events::GoalEvent::Fee(fee_recipient, goal_id, fee_amount, soroban_sdk::Symbol::new(env, "break")),
+                (symbol_short!("brk_fee"), fee_recipient, goal_id),
+                fee_amount,
             );
         }
     }
 
     env.events().publish(
-        (),
-        crate::events::GoalEvent::Break(user.clone(), goal_id, net_amount),
+        (symbol_short!("goal_brk"), user.clone(), goal_id),
+        net_amount,
     );
 
     remove_goal_from_user(env, &user, goal_id);

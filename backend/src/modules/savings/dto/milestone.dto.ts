@@ -1,11 +1,4 @@
-import {
-  IsInt,
-  IsString,
-  Min,
-  Max,
-  MaxLength,
-  IsNotEmpty,
-} from 'class-validator';
+import { IsInt, IsString, Min, Max, MaxLength, IsNotEmpty } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { MilestoneType } from '../entities/savings-goal-milestone.entity';
 

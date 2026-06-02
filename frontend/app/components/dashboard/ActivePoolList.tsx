@@ -1,8 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React from "react";
 import ActivePoolCard, { PoolItem } from "./ActivePoolCard";
-import Skeleton from "../ui/Skeleton";
 
 const MOCK_POOLS: PoolItem[] = [
   {
@@ -23,27 +22,7 @@ const MOCK_POOLS: PoolItem[] = [
   },
 ];
 
-const ActivePoolListSkeleton: React.FC = () => (
-  <section className="bg-linear-to-b from-[rgba(6,18,20,0.45)] to-[rgba(4,12,14,0.35)] border border-[rgba(8,120,120,0.06)] rounded-2xl p-[18px]">
-    <div className="flex justify-between items-center mb-3">
-      <Skeleton className="h-5 w-40" />
-      <Skeleton className="h-4 w-14" />
-    </div>
-    <div className="flex flex-col gap-3">
-      {[1, 2].map((i) => (
-        <Skeleton key={i} className="h-20 rounded-xl" />
-      ))}
-    </div>
-  </section>
-);
-
-interface ActivePoolListProps {
-  isLoading?: boolean;
-}
-
-const ActivePoolList: React.FC<ActivePoolListProps> = ({ isLoading = false }) => {
-  if (isLoading) return <ActivePoolListSkeleton />;
-
+const ActivePoolList: React.FC = () => {
   return (
     <section className="bg-linear-to-b from-[rgba(6,18,20,0.45)] to-[rgba(4,12,14,0.35)] border border-[rgba(8,120,120,0.06)] rounded-2xl p-[18px] text-[#dff]">
       <div className="flex justify-between items-center mb-3">

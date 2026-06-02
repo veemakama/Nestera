@@ -1,73 +1,53 @@
 import "./globals.css";
-
 import type { Metadata } from "next";
-import { ThemeProvider } from "./context/ThemeContext";
-import { WalletProvider } from "./context/WalletContext";
-import { ToastProvider } from "./context/ToastContext";
-import { WalletReconnectBanner } from "./components/WalletReconnectBanner";
-import { QueryProvider } from "./context/QueryProvider";
-import QueryProvider from "./providers/QueryProvider";
-import ErrorBoundary from "./components/ErrorBoundary";
-import KeyboardShortcutsProvider from "./providers/KeyboardShortcutsProvider";
+import { headers } from "next/headers";
+import { Suspense } from "react";
+import IntlProvider from "./i18n/provider";
+import AnalyticsProvider from "./components/AnalyticsProvider";
+import en from "./locales/en.json";
+import es from "./locales/es.json";
 
-const BASE_URL = "https://nestera.app";
+const messages = { en, es };
+const defaultLocale = "en";
+const rtlLocales = ["ar", "he", "fa", "ur"];
 
-const themeBootScript = `(function(){try{var key='nestera-theme';var root=document.documentElement;var stored=window.localStorage.getItem(key);var theme=stored==='light'||stored==='dark'||stored==='system'?stored:'system';var resolved=theme==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':theme==='system'?'light':theme;root.dataset.themePreference=theme;root.dataset.theme=resolved;root.classList.remove('light','dark');root.classList.add(resolved);root.style.colorScheme=resolved;}catch(error){document.documentElement.dataset.themePreference='system';}})();`;
-
-export const metadata: Metadata = {
-  title: "Nestera - Decentralized Savings on Stellar",
-  description: "Secure, transparent savings powered by Stellar & Soroban",
-  metadataBase: new URL(BASE_URL),
-  alternates: {
-    canonical: "/",
-  },
-  openGraph: {
-    type: "website",
-    locale: "en_US",
-    url: BASE_URL,
-    title: "Nestera - Decentralized Savings on Stellar",
-    description: "Secure, transparent savings powered by Stellar & Soroban",
-    images: [
-      {
-        url: "/og-image.png",
-        width: 1200,
-        height: 630,
-        alt: "Nestera - Decentralized Savings on Stellar",
-      },
-    ],
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Nestera - Decentralized Savings on Stellar",
-    description: "Secure, transparent savings powered by Stellar & Soroban",
-    images: ["/og-image.png"],
-  },
+const getLocale = async () => {
+  const locale = (await headers()).get("x-nestera-locale") ?? defaultLocale;
+  return locale in messages ? (locale as keyof typeof messages) : defaultLocale;
 };
 
-export default function RootLayout({
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getLocale();
+  const metadata = messages[locale].metadata;
+
+  return {
+    title: metadata.title,
+    description: metadata.description,
+    alternates: {
+      languages: {
+        en: "/en",
+        es: "/es",
+      },
+    },
+  };
+}
+
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const locale = await getLocale();
+
   return (
-    <html lang="en" suppressHydrationWarning>
-      <head>
-        <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
-      </head>
-      <body className="bg-[var(--color-background)] text-[var(--color-text)] antialiased">
-        <a href="#main-content" className="skip-link">
-          Skip to content
-        </a>
-        <ThemeProvider>
-          <QueryProvider>
-            <WalletProvider>
-              <ToastProvider>
-                <WalletReconnectBanner />
-                <main id="main-content">{children}</main>
-              </ToastProvider>
-            </WalletProvider>
-          </QueryProvider>
-        </ThemeProvider>
+    <html lang={locale} dir={rtlLocales.includes(locale) ? "rtl" : "ltr"}>
+      <body className="bg-slate-950 text-white">
+        <IntlProvider locale={locale} messages={messages[locale]}>
+          {children}
+          <Suspense fallback={null}>
+            <AnalyticsProvider />
+          </Suspense>
+        </IntlProvider>
       </body>
     </html>
   );

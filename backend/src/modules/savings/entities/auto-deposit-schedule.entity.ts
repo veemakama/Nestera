@@ -40,11 +40,7 @@ export class AutoDepositSchedule {
   @Column({ type: 'enum', enum: AutoDepositFrequency })
   frequency: AutoDepositFrequency;
 
-  @Column({
-    type: 'enum',
-    enum: AutoDepositStatus,
-    default: AutoDepositStatus.ACTIVE,
-  })
+  @Column({ type: 'enum', enum: AutoDepositStatus, default: AutoDepositStatus.ACTIVE })
   status: AutoDepositStatus;
 
   /** Next scheduled execution time */

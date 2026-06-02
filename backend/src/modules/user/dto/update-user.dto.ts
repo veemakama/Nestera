@@ -1,5 +1,4 @@
-import { IsOptional, IsString, MaxLength, IsDate } from 'class-validator';
-import { Type } from 'class-transformer';
+import { IsOptional, IsString, MaxLength } from 'class-validator';
 
 export class UpdateUserDto {
   @IsOptional()
@@ -11,11 +10,6 @@ export class UpdateUserDto {
   @IsString()
   @MaxLength(500)
   bio?: string;
-
-  @IsOptional()
-  @IsDate()
-  @Type(() => Date)
-  lastLoginAt?: Date;
 }
 
 export class ApproveKycDto {

@@ -72,11 +72,6 @@ pub fn create_lock_save(
     ttl::extend_user_ttl(env, &user);
     ttl::extend_user_plan_list_ttl(env, &DataKey::UserLockSaves(user.clone()));
 
-    env.events().publish(
-        (),
-        crate::events::ProtocolEvent::LockCreated(user, amount, duration, lock_id),
-    );
-
     Ok(lock_id)
 }
 
@@ -116,7 +111,8 @@ pub fn withdraw_lock_save(env: &Env, user: Address, lock_id: u64) -> Result<i128
     ttl::extend_lock_ttl(env, lock_id);
     ttl::extend_user_ttl(env, &user);
 
-    env.events().publish((), crate::events::ProtocolEvent::LockWithdraw(user, lock_id, final_amount));
+    env.events()
+        .publish((symbol_short!("withdraw"), user, lock_id), final_amount);
 
     Ok(final_amount)
 }

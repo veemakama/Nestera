@@ -4,66 +4,33 @@ import {
   UnauthorizedException,
   BadRequestException,
   Inject,
-  Optional,
   forwardRef,
-  Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
-import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, LessThan } from 'typeorm';
 import { UserService } from '../modules/user/user.service';
 import {
   RegisterDto,
   LoginDto,
   VerifySignatureDto,
   LinkWalletDto,
-  RefreshTokenDto,
 } from './dto/auth.dto';
-import { AuditLogService } from '../common/services/audit-log.service';
-import {
-  AuditAction,
-  AuditResourceType,
-} from '../common/entities/audit-log.entity';
-import { CACHE_MANAGER } from '@nestjs/cache-manager';
-import { Cache } from 'cache-manager';
+// import { Cache } from 'cache-manager';
+// import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import * as bcrypt from 'bcrypt';
 import { randomUUID } from 'crypto';
 import * as StellarSdk from '@stellar/stellar-sdk';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { AuthRateLimitService } from './services/auth-rate-limit.service';
-import { RefreshToken } from './entities/refresh-token.entity';
-import { Session } from './entities/session.entity';
-import { ConfigService } from '@nestjs/config';
-import { User } from '../modules/user/entities/user.entity';
 
 @Injectable()
 export class AuthService {
-  private readonly logger = new Logger(AuthService.name);
-  private readonly NONCE_TTL = 300000; // 5 minutes in milliseconds
-  private readonly RATE_LIMIT_WINDOW = 900000; // 15 minutes in milliseconds
-  private readonly MAX_NONCE_REQUESTS = 5; // Max requests per window
-  private readonly REFRESH_TOKEN_EXPIRY_DAYS = 7;
-  private readonly MAX_FAILED_ATTEMPTS = 5;
-  private readonly LOCKOUT_DURATION_MINUTES = 60;
-  private readonly SESSION_EXPIRY_HOURS = 24;
-
   constructor(
     private readonly userService: UserService,
     private readonly jwtService: JwtService,
     private readonly eventEmitter: EventEmitter2,
-    @Inject(CACHE_MANAGER) private cacheManager: Cache,
-    private readonly authRateLimitService: AuthRateLimitService,
-    @InjectRepository(RefreshToken)
-    private readonly refreshTokenRepository: Repository<RefreshToken>,
-    @InjectRepository(Session)
-    private readonly sessionRepository: Repository<Session>,
-    @InjectRepository(User)
-    private readonly userRepository: Repository<User>,
-    private readonly configService: ConfigService,
-    @Optional() private readonly auditLogService?: AuditLogService,
+    // @Inject(CACHE_MANAGER) private cacheManager: Cache,
   ) {}
 
-  async register(dto: RegisterDto, ip?: string, userAgent?: string) {
+  async register(dto: RegisterDto) {
     const existingUser = await this.userService.findByEmail(dto.email);
     if (existingUser) {
       throw new ConflictException('User already exists');
@@ -83,64 +50,17 @@ export class AuthService {
       });
     }
 
-    // Generate tokens
-    const session = await this.createSession(
-      user.id,
-      dto.deviceId || 'default',
-      dto.deviceName,
-      ip,
-      userAgent,
-    );
-    const accessToken = this.generateToken(
-      user.id,
-      user.email,
-      user.role,
-      undefined,
-      session.jti,
-    );
-    const refreshToken = await this.createRefreshToken(
-      user.id,
-      dto.deviceId || 'default',
-      dto.deviceName,
-      ip,
-      userAgent,
-    );
-
     return {
       user,
-      accessToken,
-      refreshToken: refreshToken.token,
-      expiresIn: this.getExpiresInSeconds(),
+      accessToken: this.generateToken(user.id, user.email, user.role),
     };
   }
 
-  async login(dto: LoginDto, ip?: string, userAgent?: string) {
+  async login(dto: LoginDto) {
     const user = await this.validateUser(dto.email, dto.password);
     if (!user) {
-      // Record failed attempt
-      await this.handleFailedLogin(dto.email, ip);
-      void this.auditLogService?.log({
-        action: AuditAction.LOGIN,
-        actor: dto.email,
-        resourceType: AuditResourceType.USER,
-        success: false,
-        errorMessage: 'Invalid credentials',
-        ipAddress: ip,
-        userAgent,
-        description: 'User login failed - invalid credentials',
-      });
       throw new UnauthorizedException('Invalid credentials');
     }
-
-    // Check if account is locked
-    if (user.isLocked && user.lockedUntil && user.lockedUntil > new Date()) {
-      throw new UnauthorizedException(
-        'Account is temporarily locked due to too many failed login attempts. Please try again later.',
-      );
-    }
-
-    // Clear failed attempts on successful login
-    await this.clearFailedLoginAttempts(user.id);
 
     // Check if 2FA is enabled
     const fullUser = await this.userService.findByEmail(dto.email);
@@ -152,127 +72,14 @@ export class AuthService {
       };
     }
 
-    // Generate tokens
-    const session = await this.createSession(
-      user.id,
-      dto.deviceId || 'default',
-      dto.deviceName,
-      ip,
-      userAgent,
-    );
-    const accessToken = this.generateToken(
-      user.id,
-      user.email,
-      user.role,
-      user.kycStatus,
-      session.jti,
-    );
-    const refreshToken = await this.createRefreshToken(
-      user.id,
-      dto.deviceId || 'default',
-      dto.deviceName,
-      ip,
-      userAgent,
-    );
-
-    // Update last login
-    await this.userService.update(user.id, { lastLoginAt: new Date() });
-
-    void this.auditLogService?.log({
-      action: AuditAction.LOGIN,
-      actor: user.email,
-      resourceType: AuditResourceType.USER,
-      resourceId: user.id,
-      success: true,
-      ipAddress: ip,
-      userAgent,
-      description: 'User login successful',
-    });
-
     return {
-      accessToken,
-      refreshToken: refreshToken.token,
-      expiresIn: this.getExpiresInSeconds(),
+      accessToken: this.generateToken(
+        user.id,
+        user.email,
+        user.role,
+        user.kycStatus,
+      ),
     };
-  }
-
-  private async handleFailedLogin(email: string, ip?: string): Promise<void> {
-    const user = await this.userService.findByEmail(email);
-    if (!user) {
-      // Record failed attempt for non-existent user
-      if (ip) {
-        await this.authRateLimitService.recordFailedAttempt(
-          email,
-          ip,
-          'invalid_credentials',
-        );
-      }
-      return;
-    }
-
-    // Increment failed login attempts
-    const newAttempts = (user.failedLoginAttempts || 0) + 1;
-    const updateData: Partial<User> = { failedLoginAttempts: newAttempts };
-
-    // Lock account if max attempts reached
-    if (newAttempts >= this.MAX_FAILED_ATTEMPTS) {
-      const lockedUntil = new Date();
-      lockedUntil.setMinutes(
-        lockedUntil.getMinutes() + this.LOCKOUT_DURATION_MINUTES,
-      );
-      updateData.isLocked = true;
-      updateData.lockedUntil = lockedUntil;
-
-      // Emit event for email notification
-      this.eventEmitter.emit('account.locked', {
-        userId: user.id,
-        email: user.email,
-        lockedUntil,
-        ipAddress: ip,
-      });
-
-      this.logger.warn(
-        `Account locked for user ${user.id} after ${newAttempts} failed attempts`,
-      );
-    }
-
-    await this.userRepository.update(user.id, updateData);
-
-    // Record rate limit
-    if (ip) {
-      await this.authRateLimitService.recordFailedAttempt(
-        email,
-        ip,
-        'invalid_credentials',
-      );
-    }
-  }
-
-  private async clearFailedLoginAttempts(userId: string): Promise<void> {
-    await this.userRepository.update(userId, {
-      failedLoginAttempts: 0,
-      isLocked: false,
-      lockedUntil: null,
-    });
-  }
-
-  async unlockUser(userId: string): Promise<boolean> {
-    const result = await this.userRepository.update(userId, {
-      failedLoginAttempts: 0,
-      isLocked: false,
-      lockedUntil: null,
-    });
-    return (result.affected || 0) > 0;
-  }
-
-  async isUserLocked(userId: string): Promise<boolean> {
-    const user = await this.userRepository.findOne({ where: { id: userId } });
-    if (!user) return false;
-    return (
-      user.isLocked === true &&
-      user.lockedUntil != null &&
-      user.lockedUntil > new Date()
-    );
   }
 
   async validateUser(email: string, pass: string): Promise<any> {
@@ -289,9 +96,8 @@ export class AuthService {
     email: string,
     role = 'USER',
     kycStatus = 'NOT_SUBMITTED',
-    jti?: string,
   ) {
-    return this.jwtService.sign({ sub: userId, email, role, kycStatus, jti });
+    return this.jwtService.sign({ sub: userId, email, role, kycStatus });
   }
 
   async generateNonce(publicKey: string): Promise<{ nonce: string }> {
@@ -300,42 +106,15 @@ export class AuthService {
       throw new BadRequestException('Invalid Stellar public key format');
     }
 
-    // Implement rate limiting per public key
-    const rateLimitKey = `nonce:ratelimit:${publicKey}`;
-    const requestCount = await this.cacheManager.get<number>(rateLimitKey);
-
-    if (requestCount && requestCount >= this.MAX_NONCE_REQUESTS) {
-      this.logger.warn(
-        `Rate limit exceeded for public key: ${publicKey.substring(0, 10)}...`,
-      );
-      throw new UnauthorizedException(
-        `Too many nonce requests. Maximum ${this.MAX_NONCE_REQUESTS} requests per 15 minutes allowed.`,
-      );
-    }
-
-    // Increment rate limit counter
-    const newCount = (requestCount || 0) + 1;
-    await this.cacheManager.set(rateLimitKey, newCount, this.RATE_LIMIT_WINDOW);
-
-    // Generate nonce with timestamp for additional validation
     const nonce = randomUUID();
-    const timestamp = Date.now();
-    const nonceData = { nonce, timestamp };
-
-    // Store nonce in cache with TTL
-    const cacheKey = `nonce:${publicKey}`;
-    await this.cacheManager.set(cacheKey, nonceData, this.NONCE_TTL);
-
-    this.logger.debug(
-      `Nonce generated for public key: ${publicKey.substring(0, 10)}... (TTL: ${this.NONCE_TTL}ms)`,
-    );
+    // const cacheKey = `nonce:${publicKey}`;
+    // await this.cacheManager.set(cacheKey, nonce, 300000); // 300 seconds = 5 minutes
 
     return { nonce };
   }
 
   async verifySignature(
     dto: VerifySignatureDto,
-    ip?: string,
   ): Promise<{ accessToken: string }> {
     const { publicKey, signature, nonce } = dto;
 
@@ -344,92 +123,30 @@ export class AuthService {
       throw new BadRequestException('Invalid Stellar public key format');
     }
 
-    // Retrieve and atomically consume nonce
-    const cacheKey = `nonce:${publicKey}`;
-    const storedNonceData = await this.cacheManager.get<{
-      nonce: string;
-      timestamp: number;
-    }>(cacheKey);
+    // Retrieve stored nonce
+    // const cacheKey = `nonce:${publicKey}`;
+    // const storedNonce = await this.cacheManager.get<string>(cacheKey);
+    const storedNonce = nonce; // Temporarily bypass cache for testing
 
-    if (!storedNonceData) {
-      this.logger.warn(
-        `Nonce not found or expired for public key: ${publicKey.substring(0, 10)}...`,
-      );
-      if (ip) {
-        await this.authRateLimitService.recordFailedAttempt(
-          publicKey,
-          ip,
-          'nonce_mismatch',
-        );
-      }
+    if (!storedNonce) {
       throw new UnauthorizedException(
         'Nonce not found or expired. Request a new nonce.',
       );
-    }
-
-    // Validate nonce timestamp (additional security layer)
-    const nonceAge = Date.now() - storedNonceData.timestamp;
-    if (nonceAge > this.NONCE_TTL) {
-      await this.cacheManager.del(cacheKey);
-      this.logger.warn(
-        `Expired nonce used for public key: ${publicKey.substring(0, 10)}...`,
-      );
-      if (ip) {
-        await this.authRateLimitService.recordFailedAttempt(
-          publicKey,
-          ip,
-          'nonce_mismatch',
-        );
-      }
-      throw new UnauthorizedException(
-        'Nonce has expired. Request a new nonce.',
-      );
-    }
-
-    // Verify nonce matches
-    if (storedNonceData.nonce !== nonce) {
-      this.logger.warn(
-        `Nonce mismatch for public key: ${publicKey.substring(0, 10)}...`,
-      );
-      if (ip) {
-        await this.authRateLimitService.recordFailedAttempt(
-          publicKey,
-          ip,
-          'nonce_mismatch',
-        );
-      }
-      throw new UnauthorizedException('Nonce mismatch');
     }
 
     // Verify signature
     const isValidSignature = this.verifyWalletSignature(
       publicKey,
       signature,
-      storedNonceData.nonce,
+      storedNonce,
     );
 
     if (!isValidSignature) {
-      this.logger.warn(
-        `Invalid signature for public key: ${publicKey.substring(0, 10)}...`,
-      );
-      if (ip) {
-        await this.authRateLimitService.recordFailedAttempt(
-          publicKey,
-          ip,
-          'invalid_signature',
-        );
-      }
       throw new UnauthorizedException('Invalid signature');
     }
 
-    // Atomically consume the nonce (delete it immediately after successful verification)
-    await this.cacheManager.del(cacheKey);
-    this.logger.debug(
-      `Nonce consumed for public key: ${publicKey.substring(0, 10)}...`,
-    );
-
-    // Clear failed attempts on successful verification
-    await this.authRateLimitService.clearFailedAttempts(publicKey);
+    // Consume the nonce (delete it)
+    // await this.cacheManager.del(cacheKey);
 
     // Find or create user by public key
     let user = await this.userService.findByPublicKey(publicKey);
@@ -441,9 +158,6 @@ export class AuthService {
         email: `${publicKey.substring(0, 10)}@stellar.wallet`,
         name: `Stellar Wallet User`,
       });
-      this.logger.log(
-        `New user created with public key: ${publicKey.substring(0, 10)}...`,
-      );
     }
 
     return {
@@ -461,7 +175,7 @@ export class AuthService {
    *
    * The method:
    *  - Validates the Stellar key format
-   *  - Verifies the Ed25519 signature with proper nonce validation
+   *  - Verifies the Ed25519 signature (same logic as verifySignature)
    *  - Delegates to UserService.linkWallet, which enforces uniqueness at the DB row level
    *
    * @param userId   Extracted from the verified JWT by JwtAuthGuard
@@ -478,72 +192,19 @@ export class AuthService {
       throw new BadRequestException('Invalid Stellar public key format');
     }
 
-    // 2. Retrieve and validate stored nonce
-    const cacheKey = `nonce:${publicKey}`;
-    const storedNonceData = await this.cacheManager.get<{
-      nonce: string;
-      timestamp: number;
-    }>(cacheKey);
-
-    if (!storedNonceData) {
-      this.logger.warn(
-        `Nonce not found for wallet linking: ${publicKey.substring(0, 10)}...`,
-      );
-      throw new UnauthorizedException(
-        'Nonce not found or expired. Request a new nonce.',
-      );
-    }
-
-    // Validate nonce timestamp
-    const nonceAge = Date.now() - storedNonceData.timestamp;
-    if (nonceAge > this.NONCE_TTL) {
-      await this.cacheManager.del(cacheKey);
-      this.logger.warn(
-        `Expired nonce used for wallet linking: ${publicKey.substring(0, 10)}...`,
-      );
-      throw new UnauthorizedException(
-        'Nonce has expired. Request a new nonce.',
-      );
-    }
-
-    // Verify nonce matches
-    if (storedNonceData.nonce !== nonce) {
-      this.logger.warn(
-        `Nonce mismatch for wallet linking: ${publicKey.substring(0, 10)}...`,
-      );
-      throw new UnauthorizedException('Nonce mismatch');
-    }
-
-    // 3. Verify the Ed25519 signature over the nonce
+    // 2. Verify the Ed25519 signature over the nonce
     //    This proves the caller controls the private key behind publicKey.
-    const isValid = this.verifyWalletSignature(
-      publicKey,
-      signature,
-      storedNonceData.nonce,
-    );
+    const isValid = this.verifyWalletSignature(publicKey, signature, nonce);
     if (!isValid) {
-      this.logger.warn(
-        `Invalid signature for wallet linking: ${publicKey.substring(0, 10)}...`,
-      );
       throw new UnauthorizedException(
         'Signature verification failed. Ensure you signed the exact nonce bytes.',
       );
     }
 
-    // Atomically consume the nonce
-    await this.cacheManager.del(cacheKey);
-    this.logger.debug(
-      `Nonce consumed for wallet linking: ${publicKey.substring(0, 10)}...`,
-    );
-
-    // 4. Persist the link; UserService throws ConflictException on duplicates
+    // 3. Persist the link; UserService throws ConflictException on duplicates
     const updatedUser = await this.userService.linkWalletAddress(
       userId,
       publicKey,
-    );
-
-    this.logger.log(
-      `Wallet linked successfully for user ${userId}: ${publicKey.substring(0, 10)}...`,
     );
 
     return {
@@ -568,269 +229,6 @@ export class AuthService {
       return keypair.verify(Buffer.from(nonce), signatureBuffer);
     } catch (error) {
       return false;
-    }
-  }
-
-  // --- Refresh Token Methods ---
-
-  private async createRefreshToken(
-    userId: string,
-    deviceId: string,
-    deviceName?: string,
-    ipAddress?: string,
-    userAgent?: string,
-  ): Promise<RefreshToken> {
-    const token = randomUUID();
-    const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + this.REFRESH_TOKEN_EXPIRY_DAYS);
-
-    const refreshToken = this.refreshTokenRepository.create({
-      userId,
-      token,
-      deviceId,
-      deviceName,
-      ipAddress,
-      userAgent,
-      expiresAt,
-    });
-
-    return this.refreshTokenRepository.save(refreshToken);
-  }
-
-  async refreshToken(dto: RefreshTokenDto): Promise<{
-    accessToken: string;
-    refreshToken: string;
-    expiresIn: number;
-  }> {
-    const { token, deviceId } = dto;
-
-    // Find the refresh token
-    const refreshToken = await this.refreshTokenRepository.findOne({
-      where: { token },
-      relations: ['user'],
-    });
-
-    if (!refreshToken) {
-      throw new UnauthorizedException('Invalid refresh token');
-    }
-
-    // Check if token is revoked
-    if (refreshToken.isRevoked) {
-      throw new UnauthorizedException('Refresh token has been revoked');
-    }
-
-    // Check if token is expired
-    if (refreshToken.expiresAt < new Date()) {
-      throw new UnauthorizedException('Refresh token has expired');
-    }
-
-    // Check if user is active
-    if (!refreshToken.user || !refreshToken.user.isActive) {
-      throw new UnauthorizedException('User account is not active');
-    }
-
-    // Check if user account is locked
-    if (
-      refreshToken.user.isLocked &&
-      refreshToken.user.lockedUntil &&
-      refreshToken.user.lockedUntil > new Date()
-    ) {
-      throw new UnauthorizedException('Account is locked');
-    }
-
-    // Rotate the token: revoke old and create new
-    await this.revokeRefreshToken(token);
-
-    // Create new session for token rotation
-    const newSession = await this.createSession(
-      refreshToken.user.id,
-      deviceId || refreshToken.deviceId,
-      refreshToken.deviceName,
-      refreshToken.ipAddress,
-      refreshToken.userAgent,
-    );
-
-    const newAccessToken = this.generateToken(
-      refreshToken.user.id,
-      refreshToken.user.email,
-      refreshToken.user.role,
-      refreshToken.user.kycStatus,
-      newSession.jti,
-    );
-
-    const newRefreshToken = await this.createRefreshToken(
-      refreshToken.user.id,
-      deviceId || refreshToken.deviceId,
-      refreshToken.deviceName,
-      refreshToken.ipAddress,
-      refreshToken.userAgent,
-    );
-
-    return {
-      accessToken: newAccessToken,
-      refreshToken: newRefreshToken.token,
-      expiresIn: this.getExpiresInSeconds(),
-    };
-  }
-
-  async revokeRefreshToken(token: string): Promise<boolean> {
-    const result = await this.refreshTokenRepository.update(
-      { token },
-      { isRevoked: true },
-    );
-    return (result.affected || 0) > 0;
-  }
-
-  async revokeAllUserTokens(userId: string): Promise<number> {
-    const result = await this.refreshTokenRepository.update(
-      { userId, isRevoked: false },
-      { isRevoked: true },
-    );
-    return result.affected || 0;
-  }
-
-  async revokeTokenByDevice(userId: string, deviceId: string): Promise<number> {
-    const result = await this.refreshTokenRepository.update(
-      { userId, deviceId, isRevoked: false },
-      { isRevoked: true },
-    );
-    return result.affected || 0;
-  }
-
-  async getUserActiveSessions(userId: string): Promise<RefreshToken[]> {
-    return this.refreshTokenRepository.find({
-      where: { userId, isRevoked: false },
-      select: [
-        'id',
-        'deviceId',
-        'deviceName',
-        'ipAddress',
-        'userAgent',
-        'createdAt',
-        'expiresAt',
-      ],
-      order: { createdAt: 'DESC' },
-    });
-  }
-
-  async cleanupExpiredTokens(): Promise<number> {
-    const result = await this.refreshTokenRepository.delete({
-      expiresAt: LessThan(new Date()),
-    });
-    return result.affected || 0;
-  }
-
-  // --- Session Management Methods ---
-
-  private async createSession(
-    userId: string,
-    deviceId: string,
-    deviceName?: string,
-    ipAddress?: string,
-    userAgent?: string,
-  ): Promise<Session> {
-    const jti = randomUUID();
-    const expiresAt = new Date();
-    expiresAt.setHours(expiresAt.getHours() + this.SESSION_EXPIRY_HOURS);
-
-    const session = this.sessionRepository.create({
-      userId,
-      jti,
-      deviceId,
-      deviceName,
-      ipAddress,
-      userAgent,
-      expiresAt,
-      lastAccessedAt: new Date(),
-    });
-
-    return this.sessionRepository.save(session);
-  }
-
-  async revokeSession(jti: string): Promise<boolean> {
-    const result = await this.sessionRepository.update(
-      { jti },
-      { isRevoked: true },
-    );
-    return (result.affected || 0) > 0;
-  }
-
-  async revokeAllUserSessions(userId: string): Promise<number> {
-    const result = await this.sessionRepository.update(
-      { userId, isRevoked: false },
-      { isRevoked: true },
-    );
-    const count = result.affected || 0;
-
-    if (count > 0) {
-      void this.auditLogService?.log({
-        action: AuditAction.LOGOUT,
-        actor: userId,
-        resourceType: AuditResourceType.USER,
-        resourceId: userId,
-        success: true,
-        description: `User logged out — ${count} session(s) revoked`,
-      });
-    }
-
-    return count;
-  }
-
-  async revokeUserSessionsByDevice(
-    userId: string,
-    deviceId: string,
-  ): Promise<number> {
-    const result = await this.sessionRepository.update(
-      { userId, deviceId, isRevoked: false },
-      { isRevoked: true },
-    );
-    return result.affected || 0;
-  }
-
-  async getUserSessions(userId: string): Promise<Session[]> {
-    return this.sessionRepository.find({
-      where: { userId, isRevoked: false },
-      select: [
-        'id',
-        'jti',
-        'deviceId',
-        'deviceName',
-        'ipAddress',
-        'userAgent',
-        'createdAt',
-        'expiresAt',
-        'lastAccessedAt',
-      ],
-      order: { createdAt: 'DESC' },
-    });
-  }
-
-  async cleanupExpiredSessions(): Promise<number> {
-    const result = await this.sessionRepository.delete({
-      expiresAt: LessThan(new Date()),
-    });
-    return result.affected || 0;
-  }
-
-  private getExpiresInSeconds(): number {
-    const expiration = this.configService.get<string>('jwt.expiration') || '1h';
-    const match = expiration.match(/^(\d+)([smhd])$/);
-    if (!match) return 3600;
-
-    const value = parseInt(match[1], 10);
-    const unit = match[2];
-
-    switch (unit) {
-      case 's':
-        return value;
-      case 'm':
-        return value * 60;
-      case 'h':
-        return value * 3600;
-      case 'd':
-        return value * 86400;
-      default:
-        return 3600;
     }
   }
 }

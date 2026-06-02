@@ -262,7 +262,7 @@ export class SavingsService {
               .filter((s) => s.status === SubscriptionStatus.ACTIVE)
               .reduce((sum, s) => sum + Number(s.amount), 0)
           : 0;
-        const capacity = await this.getProductCapacitySnapshot(product.id, product);
+        const capacity = await this.getProductCapacitySnapshot(product.id);
 
         return {
           id: product.id,
@@ -316,7 +316,7 @@ export class SavingsService {
    */
   async compareProducts(
     productIds: string[],
-    amount: number,
+    amount?: number,
     duration?: number,
   ): Promise<ProductComparisonResponseDto> {
     const cacheKey = `compare:${[...productIds].sort().join(',')}:${amount ?? ''}:${duration ?? ''}`;
@@ -339,53 +339,26 @@ export class SavingsService {
       );
     }
 
-    const items: ProductComparisonItemDto[] = products.map((product) => {
-      const apy = Number(product.interestRate);
-      const productDuration = duration ?? product.tenureMonths ?? 12;
-
-      const projectedEarnings = this.calculateProjectedEarnings(
-        amount,
-        apy,
-        productDuration,
-      );
-
-      return {
-        id: product.id,
-        name: product.name,
-        type: product.type,
-        description: product.description,
-        apy,
-        tenure: product.tenureMonths,
-        riskLevel: deriveRiskLevel(product.type),
-        minAmount: Number(product.minAmount),
-        maxAmount: Number(product.maxAmount),
-        isActive: product.isActive,
-        contractId: product.contractId,
-        historicalPerformance: buildHistoricalPerformance(apy),
-        projectedEarnings,
-      };
-    });
-
-    // Recommendation logic: Highest projected return, considering risk level as tie-breaker
-    const recommendedProduct = [...items].sort((a, b) => {
-      // Primary: Projected Earnings (Descending)
-      if (b.projectedEarnings !== a.projectedEarnings) {
-        return b.projectedEarnings - a.projectedEarnings;
-      }
-      // Secondary: Risk Level (Ascending: low < medium < high)
-      const riskOrder = { low: 0, medium: 1, high: 2 };
-      return riskOrder[a.riskLevel] - riskOrder[b.riskLevel];
-    })[0];
+    const items: ProductComparisonItemDto[] = products.map((product) => ({
+      id: product.id,
+      name: product.name,
+      type: product.type,
+      description: product.description,
+      apy: Number(product.interestRate),
+      tenure: product.tenureMonths,
+      riskLevel: deriveRiskLevel(product.type),
+      minAmount: Number(product.minAmount),
+      maxAmount: Number(product.maxAmount),
+      isActive: product.isActive,
+      contractId: product.contractId,
+      historicalPerformance: buildHistoricalPerformance(
+        Number(product.interestRate),
+      ),
+    }));
 
     const response: ProductComparisonResponseDto = {
       products: items,
       cached: false,
-      recommendation: recommendedProduct
-        ? {
-            productId: recommendedProduct.id,
-            reason: `Based on your ${amount} XLM investment, ${recommendedProduct.name} offers the best balance of projected returns (${recommendedProduct.projectedEarnings} XLM after 1% fee) and ${recommendedProduct.riskLevel} risk over ${duration ?? recommendedProduct.tenure ?? 12} months.`,
-          }
-        : undefined,
     };
 
     await this.cacheManager.set(cacheKey, response, COMPARE_CACHE_TTL_MS);
@@ -600,90 +573,41 @@ export class SavingsService {
     }
 
     const userPublicKey = user.publicKey;
+
     const defaultVaultContractId =
       this.configService.get<string>('stellar.contractId') || null;
 
-    // Group subscriptions by vault contract ID for batching
-    const subscriptionsByVault = new Map<string | null, typeof subscriptions>();
-    for (const sub of subscriptions) {
-      const vaultId =
-        this.resolveVaultContractId(sub) ?? defaultVaultContractId;
-      if (!subscriptionsByVault.has(vaultId)) {
-        subscriptionsByVault.set(vaultId, []);
-      }
-      subscriptionsByVault.get(vaultId)!.push(sub);
-    }
+    return await Promise.all(
+      subscriptions.map(async (subscription) => {
+        const fallbackAmount = Number(subscription.amount);
+        const vaultContractId =
+          this.resolveVaultContractId(subscription) ?? defaultVaultContractId;
 
-    // Batch RPC calls per vault contract ID
-    const balancesByContractAndUser = new Map<string, Map<string, number>>();
+        if (!vaultContractId) {
+          return this.mapSubscriptionWithLiveBalance(
+            subscription,
+            fallbackAmount,
+            Math.round(fallbackAmount * STROOPS_PER_XLM),
+            'cache',
+            null,
+          );
+        }
 
-    await Promise.all(
-      Array.from(subscriptionsByVault.entries()).map(
-        async ([vaultContractId, vaultSubs]) => {
-          if (!vaultContractId) {
-            return;
-          }
+        const liveBalanceStroops =
+          await this.blockchainSavingsService.getUserVaultBalance(
+            vaultContractId,
+            userPublicKey,
+          );
 
-          // Check cache first
-          const cacheKey = `vault_balance:${vaultContractId}:${userPublicKey}`;
-          const cached = await this.cacheManager.get<number>(cacheKey);
-
-          if (cached !== undefined) {
-            if (!balancesByContractAndUser.has(vaultContractId)) {
-              balancesByContractAndUser.set(vaultContractId, new Map());
-            }
-            balancesByContractAndUser
-              .get(vaultContractId)!
-              .set(userPublicKey, cached);
-            return;
-          }
-
-          // Fetch balance and cache it (TTL: 5 minutes)
-          const balance =
-            await this.blockchainSavingsService.getUserVaultBalance(
-              vaultContractId,
-              userPublicKey,
-            );
-
-          await this.cacheManager.set(cacheKey, balance, 5 * 60 * 1000);
-
-          if (!balancesByContractAndUser.has(vaultContractId)) {
-            balancesByContractAndUser.set(vaultContractId, new Map());
-          }
-          balancesByContractAndUser
-            .get(vaultContractId)!
-            .set(userPublicKey, balance);
-        },
-      ),
-    );
-
-    // Map results
-    return subscriptions.map((subscription) => {
-      const vaultContractId =
-        this.resolveVaultContractId(subscription) ?? defaultVaultContractId;
-      const fallbackAmount = Number(subscription.amount);
-
-      if (!vaultContractId) {
         return this.mapSubscriptionWithLiveBalance(
           subscription,
-          fallbackAmount,
-          Math.round(fallbackAmount * STROOPS_PER_XLM),
-          'cache',
-          null,
+          this.stroopsToDecimal(liveBalanceStroops),
+          liveBalanceStroops,
+          'rpc',
+          vaultContractId,
         );
-      }
-
-      const liveBalanceStroops =
-        balancesByContractAndUser.get(vaultContractId)?.get(userPublicKey) ?? 0;
-
-      return this.mapSubscriptionWithLiveBalance(
-        subscription,
-        this.stroopsToDecimal(liveBalanceStroops),
-        liveBalanceStroops,
-        'rpc',
-        vaultContractId,
-      );
-    });
+      }),
+    );
   }
 
   async getProductMetrics(
@@ -899,9 +823,8 @@ export class SavingsService {
 
   async getProductCapacitySnapshot(
     productId: string,
-    preFetchedProduct?: SavingsProduct,
   ): Promise<ProductCapacitySnapshot> {
-    const product = preFetchedProduct || await this.findOneProduct(productId);
+    const product = await this.findOneProduct(productId);
     const maxCapacity =
       product.maxCapacity != null
         ? Number(product.maxCapacity)
@@ -928,21 +851,15 @@ export class SavingsService {
     }
 
     if (source === 'database') {
-      if (product.subscriptions) {
-        utilizedCapacity = product.subscriptions
-          .filter((s) => s.status === SubscriptionStatus.ACTIVE)
-          .reduce((sum, s) => sum + Number(s.amount), 0);
-      } else {
-        const total = await this.subscriptionRepository
-          .createQueryBuilder('subscription')
-          .select('COALESCE(SUM(subscription.amount), 0)', 'total')
-          .where('subscription.productId = :productId', { productId: product.id })
-          .andWhere('subscription.status = :status', {
-            status: SubscriptionStatus.ACTIVE,
-          })
-          .getRawOne<{ total: string }>();
-        utilizedCapacity = Number(total?.total ?? 0);
-      }
+      const total = await this.subscriptionRepository
+        .createQueryBuilder('subscription')
+        .select('COALESCE(SUM(subscription.amount), 0)', 'total')
+        .where('subscription.productId = :productId', { productId })
+        .andWhere('subscription.status = :status', {
+          status: SubscriptionStatus.ACTIVE,
+        })
+        .getRawOne<{ total: string }>();
+      utilizedCapacity = Number(total?.total ?? 0);
     }
 
     const availableCapacity =
@@ -1510,31 +1427,5 @@ export class SavingsService {
     }
 
     return product;
-  }
-
-  private calculateProjectedEarnings(
-    amount: number,
-    apy: number,
-    durationMonths: number,
-  ): number {
-    const rateDecimal = apy / 100;
-    const compoundingPeriodsPerYear = 12;
-    const timeInYears = durationMonths / 12;
-
-    // A = P(1 + r/n)^(nt)
-    const projectedBalance =
-      amount *
-      Math.pow(
-        1 + rateDecimal / compoundingPeriodsPerYear,
-        compoundingPeriodsPerYear * timeInYears,
-      );
-
-    const earnings = projectedBalance - amount;
-
-    // Applying a 1% protocol fee impact as assumed in AdminAnalyticsService
-    const netEarnings = earnings * 0.99;
-
-    // Round to 7 decimals (Stellar precision)
-    return Number(netEarnings.toFixed(7));
   }
 }

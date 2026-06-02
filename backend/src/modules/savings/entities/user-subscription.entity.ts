@@ -6,7 +6,6 @@ import {
   UpdateDateColumn,
   ManyToOne,
   JoinColumn,
-  Index,
 } from 'typeorm';
 import { SavingsProduct } from './savings-product.entity';
 
@@ -21,18 +20,15 @@ export class UserSubscription {
   @PrimaryGeneratedColumn('uuid')
   id: string;
 
-  @Index()
   @Column('uuid')
   userId: string;
 
-  @Index()
   @Column('uuid')
   productId: string;
 
   @Column('decimal', { precision: 14, scale: 2 })
   amount: number;
 
-  @Index()
   @Column({
     type: 'enum',
     enum: SubscriptionStatus,

@@ -96,7 +96,6 @@ export default function ThemeToggle({
   return (
     <div ref={containerRef} className={clsx("relative", className)}>
       <Button
-      <button
         ref={triggerRef}
         type="button"
         onClick={() => setIsOpen((current) => !current)}
@@ -131,7 +130,7 @@ export default function ThemeToggle({
             <ChevronDown size={16} className="ml-auto text-[var(--color-text-muted)]" />
           </>
         ) : null}
-      </button>
+      </Button>
 
       {isOpen ? (
         <div
@@ -176,7 +175,7 @@ export default function ThemeToggle({
                   </span>
                 </span>
                 {selected ? <Check size={16} className="text-[var(--color-accent)]" /> : null}
-              </button>
+              </Button>
             );
           })}
         </div>

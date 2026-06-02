@@ -149,7 +149,7 @@ pub fn create_group_save(
 
     // Emit event for group creation
     env.events()
-        .publish((), crate::events::ProtocolEvent::GroupCreated(creator, new_group.title.clone(), new_group.target_amount, group_id));
+        .publish((soroban_sdk::symbol_short!("grp_new"), creator), group_id);
 
     Ok(group_id)
 }
@@ -335,7 +335,7 @@ pub fn join_group_save(env: &Env, user: Address, group_id: u64) -> Result<(), Sa
 
     // Emit event for joining group
     env.events()
-        .publish((), crate::events::ProtocolEvent::GroupJoin(user, group_id));
+        .publish((soroban_sdk::symbol_short!("grp_join"), user), group_id);
 
     Ok(())
 }
@@ -476,8 +476,8 @@ pub fn contribute_to_group_save(
 
     // Emit event for contribution
     env.events().publish(
-        (),
-        crate::events::ProtocolEvent::GroupContribute(user, group_id, amount),
+        (soroban_sdk::symbol_short!("grp_cont"), user, group_id),
+        amount,
     );
 
     Ok(())
@@ -674,8 +674,8 @@ pub fn break_group_save(env: &Env, user: Address, group_id: u64) -> Result<(), S
 
     // Emit event for leaving group
     env.events().publish(
-        (),
-        crate::events::ProtocolEvent::GroupBreak(user, group_id),
+        (soroban_sdk::symbol_short!("grp_leave"), user, group_id),
+        user_contribution,
     );
 
     Ok(())

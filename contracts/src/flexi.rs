@@ -78,10 +78,8 @@ pub fn flexi_deposit(env: Env, user: Address, amount: i128) -> Result<(), Saving
                 .checked_add(fee_amount)
                 .ok_or(SavingsError::Overflow)?;
             env.storage().persistent().set(&fee_key, &new_fee_balance);
-            env.events().publish(
-                (),
-                crate::events::FlexiEvent::Fee(fee_recipient, fee_amount, soroban_sdk::Symbol::new(&env, "deposit")),
-            );
+            env.events()
+                .publish((symbol_short!("dep_fee"), fee_recipient), fee_amount);
         }
         // Record fee in treasury struct
         crate::treasury::record_fee(&env, fee_amount, soroban_sdk::Symbol::new(&env, "deposit"));
@@ -165,10 +163,8 @@ pub fn flexi_withdraw(env: Env, user: Address, amount: i128) -> Result<(), Savin
                 .checked_add(fee_amount)
                 .ok_or(SavingsError::Overflow)?;
             env.storage().persistent().set(&fee_key, &new_fee_balance);
-            env.events().publish(
-                (),
-                crate::events::FlexiEvent::Fee(fee_recipient, fee_amount, soroban_sdk::Symbol::new(&env, "withdraw")),
-            );
+            env.events()
+                .publish((symbol_short!("wth_fee"), fee_recipient), fee_amount);
         }
         // Record fee in treasury struct
         crate::treasury::record_fee(&env, fee_amount, soroban_sdk::Symbol::new(&env, "withdraw"));

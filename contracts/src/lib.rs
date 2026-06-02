@@ -23,17 +23,10 @@ pub mod strategy;
 pub mod token;
 pub mod treasury;
 mod ttl;
-mod events;
 mod upgrade;
-mod timelock;
 mod users;
 
 mod security;
-mod multisig;
-mod storage_optimization;
-mod gas_optimization;
-#[cfg(test)]
-mod fuzz_tests;
 
 mod rates;
 mod views;
@@ -185,7 +178,7 @@ impl NesteraContract {
         ttl::extend_instance_ttl(&env);
 
         env.events()
-            .publish((), events::ProtocolEvent::Init(admin_public_key));
+            .publish((symbol_short!("init"),), admin_public_key);
     }
 
     pub fn verify_signature(env: Env, payload: MintPayload, signature: BytesN<64>) -> bool {
@@ -270,8 +263,8 @@ impl NesteraContract {
         // 3. INTERACTIONS (Events)
         crate::security::release_reentrancy_guard(&env);
         env.events().publish(
-            (),
-            events::ProtocolEvent::CreatePlan(user, plan_id, initial_deposit),
+            (Symbol::new(&env, "create_plan"), user, plan_id),
+            initial_deposit,
         );
 
         Ok(plan_id)
@@ -479,7 +472,7 @@ impl NesteraContract {
         }
         env.storage().instance().set(&DataKey::Admin, &new_admin);
         env.events()
-            .publish((), events::ProtocolEvent::SetAdmin(new_admin));
+            .publish((symbol_short!("set_admin"),), new_admin);
         Ok(())
     }
 
@@ -513,7 +506,7 @@ impl NesteraContract {
         env.storage()
             .instance()
             .set(&DataKey::EarlyBreakFeeBps, &bps);
-        env.events().publish((), events::ProtocolEvent::SetEarlyBreakFee(bps));
+        env.events().publish((symbol_short!("set_brk"),), bps);
         Ok(())
     }
 
@@ -523,7 +516,7 @@ impl NesteraContract {
         env.storage()
             .instance()
             .set(&DataKey::FeeRecipient, &recipient);
-        env.events().publish((), events::ProtocolEvent::SetFeeRecipient(recipient));
+        env.events().publish((symbol_short!("set_fee"),), recipient);
         Ok(())
     }
 
@@ -533,7 +526,7 @@ impl NesteraContract {
 
         env.storage().persistent().set(&DataKey::Paused, &true);
         ttl::extend_config_ttl(&env, &DataKey::Paused);
-        env.events().publish((), events::ProtocolEvent::Pause(caller));
+        env.events().publish((symbol_short!("pause"), caller), ());
         Ok(())
     }
 
@@ -543,7 +536,7 @@ impl NesteraContract {
 
         env.storage().persistent().set(&DataKey::Paused, &false);
         ttl::extend_config_ttl(&env, &DataKey::Paused);
-        env.events().publish((), events::ProtocolEvent::Unpause(caller));
+        env.events().publish((symbol_short!("unpause"), caller), ());
         Ok(())
     }
 
@@ -702,8 +695,8 @@ impl NesteraContract {
 
         // 5. Emit event
         env.events().publish(
-            (),
-            events::ProtocolEvent::EmergencyWithdraw(user, plan_id, withdrawn_amount),
+            (Symbol::new(&env, "emergency_withdraw"), user, plan_id),
+            withdrawn_amount,
         );
 
         Ok(withdrawn_amount)
@@ -1132,7 +1125,6 @@ impl NesteraContract {
         deposit_fee_bps: u32,
         withdrawal_fee_bps: u32,
         performance_fee_bps: u32,
-        upgrade_delay: u64,
     ) -> Result<(), SavingsError> {
         config::initialize_config(
             &env,
@@ -1141,7 +1133,6 @@ impl NesteraContract {
             deposit_fee_bps,
             withdrawal_fee_bps,
             performance_fee_bps,
-            upgrade_delay,
         )
     }
 
@@ -1490,6 +1481,7 @@ impl NesteraContract {
         res
     }
 
+    /// Returns the performance metrics for a give strategy.
     pub fn get_strategy_performance(_env: &Env) -> StrategyPerformance {
         StrategyPerformance {
             total_deposited: 0,
@@ -1497,32 +1489,6 @@ impl NesteraContract {
             total_harvested: 0,
             apy_estimate_bps: 0,
         }
-    }
-
-    // ========== Security & Upgrade Logic ==========
-
-    pub fn schedule_upgrade(env: Env, admin: Address, new_wasm_hash: BytesN<32>) -> Result<(), SavingsError> {
-        upgrade::schedule_upgrade(&env, admin.clone(), new_wasm_hash.clone())?;
-        env.events().publish((), events::ProtocolEvent::UpgradeScheduled(admin, new_wasm_hash));
-        Ok(())
-    }
-
-    pub fn upgrade_contract(env: Env, new_wasm_hash: BytesN<32>) -> Result<(), SavingsError> {
-        upgrade::upgrade(&env, new_wasm_hash.clone())?;
-        env.events().publish((), events::ProtocolEvent::ContractUpgraded(new_wasm_hash));
-        Ok(())
-    }
-
-    pub fn timelock_queue(env: Env, admin: Address, action: Symbol, payload: Bytes, delay: u64) -> Result<u64, SavingsError> {
-        let proposal_id = timelock::queue_action(&env, admin.clone(), action.clone(), payload, delay)?;
-        env.events().publish((), events::ProtocolEvent::TimelockQueued(proposal_id, admin, action));
-        Ok(proposal_id)
-    }
-
-    pub fn timelock_execute(env: Env, admin: Address, proposal_id: u64) -> Result<timelock::TimelockProposal, SavingsError> {
-        let proposal = timelock::execute_action(&env, admin.clone(), proposal_id)?;
-        env.events().publish((), events::ProtocolEvent::TimelockExecuted(proposal_id, admin, proposal.action.clone()));
-        Ok(proposal)
     }
 }
 

@@ -1,8 +1,7 @@
-"use client";
+'use client';
 
 import React, { useState, useRef, useEffect } from 'react';
 import clsx from 'clsx';
-import { Button } from '@/app/components/ui/Button';
 
 interface FAQItem {
   question: string;
@@ -66,10 +65,8 @@ const FAQ: React.FC = () => {
                   : "bg-white/[0.03] border-white/[0.08] hover:border-[rgba(0,212,192,0.3)]"
               )}
             >
-              <Button
-                variant="ghost"
-                size="md"
-                className="w-full flex items-center justify-between gap-4 px-6 py-5 bg-transparent border-none text-left transition-colors duration-200 hover:bg-white/[0.02] focus-visible:rounded-xl"
+              <button
+                className="w-full flex items-center justify-between gap-4 px-6 py-5 bg-transparent border-none cursor-pointer text-left transition-colors duration-200 hover:bg-white/[0.02] focus-visible:outline focus-visible:outline-2 focus-visible:outline-[#00d4c0] focus-visible:-outline-offset-[2px] focus-visible:rounded-xl"
                 onClick={() => toggleItem(index)}
                 aria-expanded={openIndex === index}
                 aria-controls={`faq-answer-${index}`}
@@ -81,7 +78,7 @@ const FAQ: React.FC = () => {
                 >
                   {openIndex === index ? '×' : '+'}
                 </span>
-              </Button>
+              </button>
               
               <div
                 // I put the id={`faq-answer-${index}`} as against onInvalid={...} cause of errors

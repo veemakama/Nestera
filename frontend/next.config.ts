@@ -1,10 +1,10 @@
 import type { NextConfig } from "next";
+import createNextIntlPlugin from "next-intl/plugin";
+
+const withNextIntl = createNextIntlPlugin("./app/i18n/request.ts");
 
 const nextConfig: NextConfig = {
-  output: "standalone",
-  turbopack: {
-    root: __dirname,
-  },
+  /* config options here */
 };
 
-export default nextConfig;
+export default withNextIntl(nextConfig);

@@ -91,7 +91,10 @@ pub fn register_strategy(
         .persistent()
         .extend_ttl(&list_key, ttl::LOW_THRESHOLD, ttl::EXTEND_TO);
 
-    env.events().publish((), crate::events::ProtocolEvent::StratRegistered(strategy_address));
+    env.events().publish(
+        (symbol_short!("strat"), symbol_short!("register")),
+        strategy_address,
+    );
 
     Ok(())
 }
@@ -130,7 +133,10 @@ pub fn disable_strategy(
         .persistent()
         .extend_ttl(&info_key, ttl::LOW_THRESHOLD, ttl::EXTEND_TO);
 
-    env.events().publish((), crate::events::ProtocolEvent::StratDisabled(strategy_address));
+    env.events().publish(
+        (symbol_short!("strat"), symbol_short!("disable")),
+        strategy_address,
+    );
 
     Ok(())
 }

@@ -8,13 +8,7 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import {
-  ApiBody,
-  ApiParam,
-  ApiTags,
-  ApiOperation,
-  ApiResponse,
-} from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { DisputesService } from './disputes.service';
 import {
   CreateDisputeDto,
@@ -31,7 +25,6 @@ export class DisputesController {
   @Post()
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Open a new dispute' })
-  @ApiBody({ type: CreateDisputeDto })
   @ApiResponse({ status: 201, description: 'Dispute created', type: Dispute })
   @ApiResponse({ status: 400, description: 'Invalid claim ID' })
   async createDispute(
@@ -53,7 +46,6 @@ export class DisputesController {
 
   @Get(':id')
   @ApiOperation({ summary: 'Get dispute by ID' })
-  @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
   @ApiResponse({ status: 200, description: 'Dispute details', type: Dispute })
   @ApiResponse({ status: 404, description: 'Dispute not found' })
   async getDispute(@Param('id') id: string): Promise<Dispute> {
@@ -62,8 +54,6 @@ export class DisputesController {
 
   @Patch(':id')
   @ApiOperation({ summary: 'Update dispute status' })
-  @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
-  @ApiBody({ type: UpdateDisputeDto })
   @ApiResponse({ status: 200, description: 'Dispute updated', type: Dispute })
   @ApiResponse({ status: 404, description: 'Dispute not found' })
   async updateDispute(
@@ -76,8 +66,6 @@ export class DisputesController {
   @Post(':id/messages')
   @HttpCode(HttpStatus.CREATED)
   @ApiOperation({ summary: 'Add message/evidence to dispute' })
-  @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
-  @ApiBody({ type: AddDisputeMessageDto })
   @ApiResponse({
     status: 201,
     description: 'Message added',

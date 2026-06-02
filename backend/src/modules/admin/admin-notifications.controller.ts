@@ -11,7 +11,6 @@ import {
 import {
   ApiTags,
   ApiBearerAuth,
-  ApiBody,
   ApiOperation,
   ApiResponse,
   ApiQuery,
@@ -32,7 +31,7 @@ import { Role } from '../../common/enums/role.enum';
 @Controller('admin/notifications')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @Roles(Role.ADMIN)
-@ApiBearerAuth('access-token')
+@ApiBearerAuth()
 export class AdminNotificationsController {
   constructor(
     private readonly notificationsService: AdminNotificationsService,
@@ -42,7 +41,6 @@ export class AdminNotificationsController {
   @ApiOperation({
     summary: 'Send broadcast notification to all or targeted users',
   })
-  @ApiBody({ type: BroadcastNotificationDto })
   @ApiResponse({
     status: 200,
     description: 'Broadcast sent',
@@ -60,16 +58,20 @@ export class AdminNotificationsController {
 
   @Post('targeted')
   @ApiOperation({ summary: 'Send targeted notification to filtered users' })
-  @ApiBody({ type: BroadcastNotificationDto })
-  @ApiResponse({ status: 200, description: 'Targeted notification sent' })
+  @ApiResponse({
+    status: 200,
+    description: 'Targeted notification sent',
+  })
   async sendTargetedNotification(@Body() dto: BroadcastNotificationDto) {
     return await this.notificationsService.broadcastNotification(dto);
   }
 
   @Post('schedule')
   @ApiOperation({ summary: 'Schedule a notification for future delivery' })
-  @ApiBody({ type: ScheduleNotificationDto })
-  @ApiResponse({ status: 201, description: 'Notification scheduled' })
+  @ApiResponse({
+    status: 201,
+    description: 'Notification scheduled',
+  })
   async scheduleNotification(@Body() dto: ScheduleNotificationDto) {
     return await this.notificationsService.scheduleNotification(dto);
   }
@@ -85,8 +87,10 @@ export class AdminNotificationsController {
 
   @Post('preview')
   @ApiOperation({ summary: 'Preview notification before sending' })
-  @ApiBody({ type: PreviewNotificationDto })
-  @ApiResponse({ status: 200, description: 'Preview data' })
+  @ApiResponse({
+    status: 200,
+    description: 'Preview data',
+  })
   async previewNotification(@Body() dto: PreviewNotificationDto) {
     return await this.notificationsService.previewNotification(dto);
   }
@@ -109,7 +113,10 @@ export class AdminNotificationsController {
 
   @Get(':id/delivery')
   @ApiOperation({ summary: 'Get delivery statistics for a notification' })
-  @ApiResponse({ status: 200, description: 'Delivery statistics' })
+  @ApiResponse({
+    status: 200,
+    description: 'Delivery statistics',
+  })
   async getDeliveryStats(@Param('id') notificationId: string) {
     return await this.notificationsService.getDeliveryStats(notificationId);
   }

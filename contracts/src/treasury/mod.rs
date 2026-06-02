@@ -136,10 +136,10 @@ pub fn record_fee(env: &Env, amount: i128, fee_type: soroban_sdk::Symbol) {
     }
     set_treasury(env, &treasury);
 
-    env.events().publish(
-        (),
-        crate::events::ProtocolEvent::FeeCollected(fee_type, amount),
-    );
+    env.events()
+        .publish((symbol_short!("fee_col"), fee_type.clone()), amount);
+    env.events()
+        .publish((Symbol::new(env, EVENT_FEE_COLLECTED), fee_type), amount);
 }
 
 /// Records yield earned into the treasury.
@@ -158,8 +158,8 @@ pub fn record_yield(env: &Env, amount: i128) {
     }
     set_treasury(env, &treasury);
     env.events().publish(
-        (),
-        crate::events::ProtocolEvent::YieldDistributed(amount, treasury.total_yield_earned),
+        (Symbol::new(env, EVENT_YIELD_DISTRIBUTED),),
+        (amount, treasury.total_yield_earned),
     );
 }
 
@@ -212,8 +212,8 @@ pub fn set_treasury_limits(
     };
     set_treasury_limits_internal(env, &limits);
     env.events().publish(
-        (),
-        crate::events::ProtocolEvent::LimitsUpdated(max_withdrawal_per_tx, daily_withdrawal_cap),
+        (symbol_short!("trs_lim"),),
+        (max_withdrawal_per_tx, daily_withdrawal_cap),
     );
 
     Ok(limits)
@@ -287,13 +287,21 @@ pub fn withdraw_treasury(
     set_daily_withdrawal_tracker(env, &daily);
     let pool_symbol = pool_to_symbol(env, &pool);
     env.events().publish(
-        (),
-        crate::events::ProtocolEvent::TreasuryWithdrawn(admin.clone(), pool_symbol, amount),
+        (
+            Symbol::new(env, EVENT_TREASURY_WITHDRAWN),
+            admin.clone(),
+            pool_symbol,
+        ),
+        (amount, new_daily_total),
+    );
+    env.events().publish(
+        (symbol_short!("trs_wth"),),
+        (pool.clone(), amount, new_daily_total),
     );
     if pool == TreasuryPool::Reserve {
         env.events().publish(
-            (),
-            crate::events::ProtocolEvent::ReserveUsed(admin.clone(), treasury.reserve_balance),
+            (Symbol::new(env, EVENT_RESERVE_USED), admin.clone()),
+            (amount, treasury.reserve_balance),
         );
     }
 
@@ -389,8 +397,19 @@ pub fn allocate_treasury(
     set_treasury(env, &treasury);
 
     env.events().publish(
-        (),
-        crate::events::ProtocolEvent::TreasuryAllocated(admin.clone(), reserve_amount, rewards_amount, operations_amount),
+        (symbol_short!("alloc"),),
+        (reserve_amount, rewards_amount, operations_amount),
+    );
+    env.events().publish(
+        (Symbol::new(env, EVENT_TREASURY_ALLOCATED), admin.clone()),
+        (
+            reserve_amount,
+            rewards_amount,
+            operations_amount,
+            reserve_percent,
+            rewards_percent,
+            operations_percent,
+        ),
     );
 
     Ok(treasury)

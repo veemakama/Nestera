@@ -9,7 +9,6 @@ import { JwtService } from '@nestjs/jwt';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { createHmac, randomBytes } from 'crypto';
-import * as QRCode from 'qrcode';
 import { User } from '../modules/user/entities/user.entity';
 
 const TOTP_STEP = 30; // seconds
@@ -30,7 +29,6 @@ export class TwoFactorService {
   async enable(userId: string): Promise<{
     secret: string;
     otpauthUrl: string;
-    qrCodeDataUrl: string;
     backupCodes: string[];
   }> {
     const user = await this.findUser(userId);
@@ -52,13 +50,12 @@ export class TwoFactorService {
       twoFactorBackupCodes: backupCodes,
     });
 
-    // Build otpauth:// URI and generate QR code as data URL
+    // Build otpauth:// URI for QR code generation by the client
     const otpauthUrl = `otpauth://totp/${ISSUER}:${encodeURIComponent(user.email)}?secret=${secret}&issuer=${ISSUER}&digits=${TOTP_DIGITS}&period=${TOTP_STEP}`;
-    const qrCodeDataUrl = await QRCode.toDataURL(otpauthUrl);
 
     this.logger.log(`2FA setup initiated for user ${userId}`);
 
-    return { secret, otpauthUrl, qrCodeDataUrl, backupCodes };
+    return { secret, otpauthUrl, backupCodes };
   }
 
   async verify(

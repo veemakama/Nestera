@@ -1,43 +1,50 @@
-use crate::storage_types::DataKey;
-use soroban_sdk::{Address, Env};
+// use crate::storage_types::DataKey;
+use soroban_sdk::{contracttype, Address, BytesN, Env}; // Assuming you have storage keys defined here, add panic with error when necessary
 
-pub fn upgrade(env: &Env, new_wasm_hash: soroban_sdk::BytesN<32>) -> Result<(), crate::errors::SavingsError> {
-    let admin: Address = env.storage().instance().get(&DataKey::Admin).ok_or(crate::errors::SavingsError::Unauthorized)?;
-    admin.require_auth();
-
-    // Check for time-lock if implemented
-    if let Some(scheduled_hash) = env.storage().instance().get::<DataKey, soroban_sdk::BytesN<32>>(&DataKey::UpgradeScheduled) {
-        if scheduled_hash != new_wasm_hash {
-             return Err(crate::errors::SavingsError::Unauthorized);
-        }
-        
-        let scheduled_at: u64 = env.storage().instance().get(&DataKey::UpgradeScheduledAt).unwrap_or(0);
-        let config = crate::config::get_config(env)?;
-        if env.ledger().timestamp() < scheduled_at + config.upgrade_delay {
-            return Err(crate::errors::SavingsError::TooEarly);
-        }
-    } else {
-        // If no time-lock, we might want to enforce one or allow admin if it's not enabled
-    }
-
-    env.deployer().update_current_contract_wasm(new_wasm_hash);
-    
-    // Clear scheduled upgrade
-    env.storage().instance().remove(&DataKey::UpgradeScheduled);
-    env.storage().instance().remove(&DataKey::UpgradeScheduledAt);
-    
-    Ok(())
+#[contracttype]
+pub enum UpgradeDataKey {
+    ContractVersion,
 }
 
-pub fn schedule_upgrade(env: &Env, admin: Address, new_wasm_hash: soroban_sdk::BytesN<32>) -> Result<(), crate::errors::SavingsError> {
+const CONTRACT_VERSION: u32 = 1;
+
+pub fn get_version(env: &Env) -> u32 {
+    env.storage()
+        .instance()
+        .get(&UpgradeDataKey::ContractVersion)
+        .unwrap_or(0)
+}
+
+pub fn set_version(env: &Env, version: u32) {
+    env.storage()
+        .instance()
+        .set(&UpgradeDataKey::ContractVersion, &version);
+}
+
+pub fn upgrade_contract(env: &Env, admin: Address, new_wasm_hash: BytesN<32>) {
+    // 1. Verify Authorization
     admin.require_auth();
-    let stored_admin: Address = env.storage().instance().get(&DataKey::Admin).ok_or(crate::errors::SavingsError::Unauthorized)?;
-    if admin != stored_admin {
-        return Err(crate::errors::SavingsError::Unauthorized);
+
+    // 2. Perform Version Validation (Migration Safety)
+    let current_version = get_version(env);
+    let new_version = CONTRACT_VERSION; // This would typically come from the new WASM logic
+
+    if new_version <= current_version {
+        // You could define a custom error for "InvalidVersion"
+        panic!("New version must be greater than current version");
     }
 
-    env.storage().instance().set(&DataKey::UpgradeScheduled, &new_wasm_hash);
-    env.storage().instance().set(&DataKey::UpgradeScheduledAt, &env.ledger().timestamp());
-    
-    Ok(())
+    // 3. Update the WASM
+    env.deployer().update_current_contract_wasm(new_wasm_hash);
+
+    // 4. Run Migration Logic if necessary
+    migrate(env, current_version);
+
+    // 5. Update stored version
+    set_version(env, new_version);
+}
+
+fn migrate(_env: &Env, _from_version: u32) {
+    // Placeholder for future state migrations
+    // Example: if from_version == 1 { ... upgrade storage structures ... }
 }

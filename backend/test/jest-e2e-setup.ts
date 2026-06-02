@@ -46,19 +46,3 @@ process.env.REDIS_URL = process.env.REDIS_URL || 'redis://localhost:6379';
 process.env.STELLAR_WEBHOOK_SECRET =
   process.env.STELLAR_WEBHOOK_SECRET ||
   'test_webhook_secret_long_enough_minimum_16_chars';
-
-// Fallback URLs required by env validation
-process.env.SOROBAN_RPC_FALLBACK_URLS =
-  process.env.SOROBAN_RPC_FALLBACK_URLS ||
-  'https://soroban-testnet.stellar.org';
-process.env.HORIZON_FALLBACK_URLS =
-  process.env.HORIZON_FALLBACK_URLS || 'https://horizon-testnet.stellar.org';
-
-// APM configuration
-process.env.APM_SAMPLING_RATE = process.env.APM_SAMPLING_RATE || '1.0';
-process.env.APM_ENABLED = process.env.APM_ENABLED || 'true';
-
-// DB pool retry configuration (fast retries in tests)
-process.env.DB_MAX_RETRIES = process.env.DB_MAX_RETRIES || '3';
-process.env.DB_RETRY_INITIAL_DELAY = process.env.DB_RETRY_INITIAL_DELAY || '100';
-process.env.DB_POOL_MONITOR_INTERVAL = process.env.DB_POOL_MONITOR_INTERVAL || '60000';

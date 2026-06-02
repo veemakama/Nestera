@@ -1,10 +1,8 @@
 "use client";
 
-import React, { useEffect, useState } from "react";
-import { Download, History, Loader2, Search, ChevronDown } from "lucide-react";
+import React from "react";
+import { Download, History, Search, ChevronDown } from "lucide-react";
 import TransactionRow, { TransactionType, TransactionStatus } from "./components/TransactionRow";
-import { useToast } from "../../context/ToastContext";
-import { Button } from "@/app/components/ui/Button";
 
 type TransactionRowData = {
   date: string;
@@ -54,14 +52,6 @@ function downloadTextFile(
 }
 
 export default function TransactionHistoryPage() {
-  const [isLoading, setIsLoading] = useState(true);
-  const toast = useToast();
-
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => setIsLoading(false), 750);
-    return () => window.clearTimeout(timeoutId);
-  }, []);
-
   const transactions: TransactionRowData[] = [
     {
       date: "Oct 25, 2023",
@@ -115,7 +105,6 @@ export default function TransactionHistoryPage() {
       `nestera-transactions-${new Date().toISOString().slice(0, 10)}.csv`,
       csv,
     );
-    toast.success("Transactions exported", "CSV file downloaded successfully.");
   }
 
   return (
@@ -135,19 +124,17 @@ export default function TransactionHistoryPage() {
           </div>
         </div>
 
-        <Button
-          variant="primary"
-          size="md"
-          leftIcon={<Download size={18} />}
+        <button
           onClick={onExportCsv}
-          className="bg-cyan-500 hover:bg-cyan-400 text-[#061a1a] shadow-lg"
+          className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-[#061a1a] font-bold rounded-xl transition-all shadow-lg active:scale-95"
         >
+          <Download size={18} />
           Export CSV
-        </Button>
+        </button>
       </div>
 
       <div className="flex flex-wrap items-center gap-4 mb-6">
-        <div className="relative min-w-0 flex-1">
+        <div className="relative flex-1 min-w-[280px]">
           <Search
             className="absolute left-4 top-1/2 -translate-y-1/2 text-[#5e8c96]"
             size={18}
@@ -160,73 +147,50 @@ export default function TransactionHistoryPage() {
         </div>
 
         {["Type: All", "Asset: All", "Status: All"].map((filter) => (
-          <Button
+          <button
+            type="button"
             key={filter}
-            variant="secondary"
-            size="md"
-            rightIcon={<ChevronDown size={14} className="opacity-70" />}
-            className="bg-[#0e2330] border-white/5 text-[#5e8c96] hover:text-white"
+            className="flex items-center gap-2 px-4 py-3 rounded-xl border bg-[#0e2330] border-white/5 text-[#5e8c96] hover:border-white/10 hover:text-white transition-all"
           >
-            {filter}
-          </Button>
+            <span className="text-sm font-medium">{filter}</span>
+            <ChevronDown size={14} opacity={0.7} />
+          </button>
         ))}
       </div>
 
-      <div className="rounded-2xl border border-white/5 bg-[#0e2330]">
-        {isLoading ? (
-          <div className="space-y-4 p-4" aria-live="polite" aria-busy="true">
-            <div className="inline-flex items-center gap-2 text-xs text-[#7fa9b0]">
-              <Loader2 size={14} className="animate-spin text-cyan-400" />
-              Loading transaction history...
-            </div>
-            {[1, 2, 3, 4].map((row) => (
-              <div key={row} className="h-[72px] animate-pulse rounded-xl bg-white/5" />
-            ))}
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <div className="min-w-[820px] overflow-hidden">
-              <div className="grid grid-cols-12 px-5 py-3 border-b border-white/5 text-[#5e8c96] text-xs font-bold uppercase tracking-widest">
-                <div className="col-span-2">Date</div>
-                <div className="col-span-2">Transaction ID</div>
-                <div className="col-span-2">Type</div>
-                <div className="col-span-2">Asset / Details</div>
-                <div className="col-span-2 text-right">Amount</div>
-                <div className="col-span-2 text-right">Status</div>
-              </div>
+      <div className="rounded-2xl border border-white/5 bg-[#0e2330] overflow-hidden">
+        <div className="grid grid-cols-12 px-5 py-3 border-b border-white/5 text-[#5e8c96] text-xs font-bold uppercase tracking-widest">
+          <div className="col-span-2">Date</div>
+          <div className="col-span-2">Transaction ID</div>
+          <div className="col-span-2">Type</div>
+          <div className="col-span-2">Asset / Details</div>
+          <div className="col-span-2 text-right">Amount</div>
+          <div className="col-span-2 text-right">Status</div>
+        </div>
 
-              {transactions.map((t) => (
-                <TransactionRow
-                  key={t.hash}
-                  date={t.date}
-                  time={t.time}
-                  transactionId={t.transactionId}
-                  type={t.type}
-                  assetDetails={t.assetDetails}
-                  amountDisplay={t.amountDisplay}
-                  isPositive={t.isPositive}
-                  status={t.status}
-                  onClick={(id) => {
-                    // TODO: Implement transaction details modal
-                  }}
-                />
-              ))}
+        {transactions.map((t) => (
+          <TransactionRow
+            key={t.hash}
+            date={t.date}
+            time={t.time}
+            transactionId={t.transactionId}
+            type={t.type}
+            assetDetails={t.assetDetails}
+            amountDisplay={t.amountDisplay}
+            isPositive={t.isPositive}
+            status={t.status}
+            onClick={(id) => console.log('Open transaction', id)}
+          />
+        ))}
 
-              <div className="h-[220px] border-b border-white/5" />
-            </div>
-          </div>
-        )}
+        {/* Empty space filler */}
+        <div className="h-[300px] border-b border-white/5"></div>
 
-        <div className="flex flex-wrap items-center justify-end gap-4 px-5 py-4 text-sm font-semibold">
-          <Button variant="ghost" size="sm" className="text-[#5e8c96]" aria-label="Previous page">
-            &lt; Prev
-          </Button>
-          <span className="rounded-lg bg-[rgba(6,110,110,0.2)] px-4 py-1.5 text-[#e2f8f8] text-sm font-semibold" aria-label="Page 1 of 12">
-            Page 1 of 12
-          </span>
-          <Button variant="ghost" size="sm" className="text-[#e2f8f8]" aria-label="Next page">
-            Next &gt;
-          </Button>
+        {/* Pagination Controls */}
+        <div className="px-5 py-4 flex items-center gap-4 text-sm font-semibold justify-end">
+          <button className="text-[#5e8c96] hover:text-[#e2f8f8] transition-colors">&lt; Prev</button>
+          <span className="px-4 py-1.5 bg-[rgba(6,110,110,0.2)] text-[#e2f8f8] rounded-lg">Page 1 of 12</span>
+          <button className="text-[#e2f8f8] hover:text-[#8ef4ef] transition-colors flex items-center gap-1">Next &gt;</button>
         </div>
       </div>
     </div>

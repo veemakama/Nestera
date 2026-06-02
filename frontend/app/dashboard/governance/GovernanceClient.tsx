@@ -6,7 +6,6 @@ import PassedProposalCard, {
   type PassedProposal,
 } from "@/app/components/dashboard/PassedProposalCard";
 import ProposalCard from "@/app/components/dashboard/ProposalCard";
-import { Button } from "@/app/components/ui/Button";
 
 export default function GovernanceClient() {
   const [activeTab, setActiveTab] = useState("Overview");
@@ -132,16 +131,19 @@ export default function GovernanceClient() {
           {tabs.map((tab) => {
             const TabIcon = tab.icon;
             return (
-              <Button
+              <button
+                type="button"
                 key={tab.label}
-                variant="ghost"
-                size="sm"
-                leftIcon={<TabIcon size={15} />}
                 onClick={() => setActiveTab(tab.label)}
-                className={activeTab === tab.label ? "bg-cyan-500/12 text-cyan-300" : "text-[#6b99a3]"}
+                className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-colors ${
+                  activeTab === tab.label
+                    ? "bg-cyan-500/12 text-cyan-300"
+                    : "text-[#6b99a3] hover:text-white hover:bg-white/5"
+                }`}
               >
+                <TabIcon size={15} />
                 {tab.label}
-              </Button>
+              </button>
             );
           })}
         </div>

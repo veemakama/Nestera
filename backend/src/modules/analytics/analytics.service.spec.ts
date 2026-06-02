@@ -8,14 +8,12 @@ import { SavingsService as BlockchainSavingsService } from '../blockchain/saving
 import { StellarService } from '../blockchain/stellar.service';
 import { OracleService } from '../blockchain/oracle.service';
 import { PortfolioTimeframe } from './dto/portfolio-timeline-query.dto';
-import { SavingsProduct } from '../savings/entities/savings-product.entity';
 
 describe('AnalyticsService', () => {
   let service: AnalyticsService;
   let userRepository: { findOne: jest.Mock };
   let eventRepository: { find: jest.Mock };
   let transactionRepository: { find: jest.Mock };
-  let savingsProductRepository: { createQueryBuilder: jest.Mock };
   let blockchainSavingsService: { getUserSavingsBalance: jest.Mock };
   let stellarService: { getHorizonServer: jest.Mock };
   let oracleService: {
@@ -36,9 +34,6 @@ describe('AnalyticsService', () => {
 
     transactionRepository = {
       find: jest.fn(),
-    };
-    savingsProductRepository = {
-      createQueryBuilder: jest.fn(),
     };
 
     blockchainSavingsService = {
@@ -70,10 +65,6 @@ describe('AnalyticsService', () => {
         {
           provide: getRepositoryToken(LedgerTransaction),
           useValue: transactionRepository,
-        },
-        {
-          provide: getRepositoryToken(SavingsProduct),
-          useValue: savingsProductRepository,
         },
         {
           provide: BlockchainSavingsService,

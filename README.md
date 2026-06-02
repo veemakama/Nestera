@@ -20,11 +20,11 @@ The project solves the problem of opaque, centralized savings platforms in emerg
 
 ## 🏗 Architecture Overview
 
-- **Frontend (`frontend/`)**  
+- **Frontend (`apps/web`)**  
   Next.js application for interacting with Nestera smart contracts. Provides user interface for creating savings accounts, depositing funds, and tracking progress.
 
-- **Backend (`backend/`)**  
-  NestJS API for off-chain services such as indexing contract events, sending notifications, managing user metadata, and aggregating analytics.
+- **Backend (`apps/api`)**  
+  Node.js API for off-chain services such as indexing contract events, sending notifications, managing user metadata, and aggregating analytics.
 
 - **Smart Contracts (`contracts/`)**  
   Soroban smart contracts written in Rust that manage all savings logic, fund custody, interest calculations, and withdrawal rules.
@@ -34,9 +34,11 @@ The project solves the problem of opaque, centralized savings platforms in emerg
 ## 📁 Repository Structure
 ```text
 /
-├── frontend/             # Next.js frontend application
-├── backend/              # NestJS backend API
+├── apps/
+│   ├── web/              # Next.js frontend
+│   └── api/              # Node.js backend API
 ├── contracts/            # Soroban smart contracts (Rust)
+├── packages/             # Shared utilities and types
 ├── scripts/              # Deployment and automation scripts
 ├── tests/                # Integration and E2E tests
 └── README.md
@@ -67,24 +69,10 @@ Before you begin, ensure you have the following installed:
 ---
 
 ## 📦 1. Clone the Repository
-
-### Quick Clone (Recommended)
-For faster cloning, use a shallow clone:
-```bash
-git clone --depth 1 https://github.com/your-org/nestera.git
-cd nestera
-```
-
-This reduces clone time significantly by downloading only the latest commit.
-
-### Full Clone (For Contributors)
-If you need the full git history:
 ```bash
 git clone https://github.com/your-org/nestera.git
 cd nestera
 ```
-
-**Note:** We're working on reducing the repository size. See [CLONE_SPEED_FIX.md](CLONE_SPEED_FIX.md) for details.
 
 ---
 
@@ -160,15 +148,15 @@ stellar contract invoke \
 
 ---
 
-## 🖥 3. Backend Setup (NestJS API)
+## 🖥 3. Backend Setup (Node.js API)
 ```bash
-cd backend
-pnpm install
+cd apps/api
+npm install
 ```
 
 ### Create Environment File
 
-Create `.env` in `backend/`:
+Create `.env` in `apps/api/`:
 ```env
 PORT=3001
 NODE_ENV=development
@@ -190,12 +178,12 @@ REDIS_URL=redis://localhost:6379
 
 ### Run Database Migrations (if applicable)
 ```bash
-pnpm run typeorm migration:run
+npm run migrate
 ```
 
 ### Start Backend Server
 ```bash
-pnpm run start:dev
+npm run dev
 ```
 
 Backend should now be running at `http://localhost:3001`
@@ -209,13 +197,13 @@ curl http://localhost:3001/health
 
 ## 🌐 4. Frontend Setup (Next.js)
 ```bash
-cd frontend
-pnpm install
+cd apps/web
+npm install
 ```
 
 ### Create Environment File
 
-Create `.env.local` in `frontend/`:
+Create `.env.local` in `apps/web/`:
 ```env
 # Stellar Network
 NEXT_PUBLIC_STELLAR_NETWORK=testnet
@@ -234,15 +222,15 @@ NEXT_PUBLIC_WALLET_CONNECT_PROJECT_ID=your_project_id
 
 ### Run Development Server
 ```bash
-pnpm dev
+npm run dev
 ```
 
 Frontend should now be running at `http://localhost:3000`
 
 ### Build for Production
 ```bash
-pnpm build
-pnpm start
+npm run build
+npm start
 ```
 
 ---
@@ -257,31 +245,31 @@ cargo test
 
 ### Backend Tests
 ```bash
-cd backend
-pnpm test
+cd apps/api
+npm test
 ```
 
 Run with coverage:
 ```bash
-pnpm run test:cov
+npm run test:coverage
 ```
 
 ### Frontend Tests
 ```bash
-cd frontend
-pnpm test
+cd apps/web
+npm test
 ```
 
 Run E2E tests (requires running backend and deployed contracts):
 ```bash
-pnpm run test:e2e
+npm run test:e2e
 ```
 
 ### Integration Tests
 
 From project root:
 ```bash
-pnpm run test:integration
+npm run test:integration
 ```
 
 ---

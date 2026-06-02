@@ -208,12 +208,6 @@ pub enum DataKey {
     DisabledStrategy(PlanType, u64),
     /// Stores the native protocol token metadata (name, symbol, decimals, supply, treasury)
     TokenMetadata,
-    /// Upgrade time-lock keys
-    UpgradeScheduled,
-    UpgradeScheduledAt,
-    /// Timelock governance keys
-    NextTimelockId,
-    TimelockProposal(u64),
 }
 
 /// Payload structure that the admin signs off-chain

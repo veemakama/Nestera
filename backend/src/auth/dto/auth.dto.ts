@@ -1,21 +1,22 @@
-import { IsEmail, IsString, IsOptional } from 'class-validator';
+import {
+  IsEmail,
+  IsString,
+  MinLength,
+  MaxLength,
+  IsOptional,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsStellarPublicKey } from '../../common/validators/is-stellar-key.validator';
-import { IsStrongPassword } from '../../common/validators/is-strong-password.validator';
 
 export class RegisterDto {
   @ApiProperty({ example: 'alice@example.com' })
   @IsEmail()
   email: string;
 
-  @ApiProperty({
-    example: 'MyP@ssw0rd!',
-    description:
-      'Must be 8-72 characters and contain at least one uppercase letter, ' +
-      'one lowercase letter, one digit, and one special character.',
-  })
+  @ApiProperty({ example: 'supersecret123' })
   @IsString()
-  @IsStrongPassword()
+  @MinLength(8)
+  @MaxLength(32)
   password: string;
 
   @ApiProperty({ example: 'Alice', required: false })
@@ -29,19 +30,6 @@ export class RegisterDto {
   @IsOptional()
   @IsString()
   referralCode?: string;
-
-  @ApiPropertyOptional({
-    example: 'device-123',
-    description: 'Device identifier',
-  })
-  @IsOptional()
-  @IsString()
-  deviceId?: string;
-
-  @ApiPropertyOptional({ example: 'My Phone', description: 'Device name' })
-  @IsOptional()
-  @IsString()
-  deviceName?: string;
 }
 
 export class LoginDto {
@@ -52,19 +40,6 @@ export class LoginDto {
   @ApiProperty({ example: 'supersecret123' })
   @IsString()
   password: string;
-
-  @ApiPropertyOptional({
-    example: 'device-123',
-    description: 'Device identifier',
-  })
-  @IsOptional()
-  @IsString()
-  deviceId?: string;
-
-  @ApiPropertyOptional({ example: 'My Phone', description: 'Device name' })
-  @IsOptional()
-  @IsString()
-  deviceName?: string;
 }
 
 export class GetNonceDto {
@@ -85,20 +60,6 @@ export class VerifySignatureDto {
   @ApiProperty({ description: 'The nonce returned by GET /auth/nonce' })
   @IsString()
   nonce: string;
-}
-
-export class RefreshTokenDto {
-  @ApiProperty({ description: 'Refresh token' })
-  @IsString()
-  token: string;
-
-  @ApiPropertyOptional({
-    example: 'device-123',
-    description: 'Device identifier',
-  })
-  @IsOptional()
-  @IsString()
-  deviceId?: string;
 }
 
 /**

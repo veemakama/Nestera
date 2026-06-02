@@ -1,7 +1,12 @@
 import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
-import { Cron } from '@nestjs/schedule';
+import {
+  Repository,
+  Between,
+  Like,
+  MoreThanOrEqual,
+  LessThanOrEqual,
+} from 'typeorm';
 import {
   AuditLog,
   AuditAction,
@@ -272,10 +277,9 @@ export class AdminAuditLogsService {
   }
 
   /**
-   * Clean up old audit logs based on retention policy.
-   * Runs daily at 02:00 UTC.
+   * Clean up old audit logs based on retention policy
+   * This should be run as a scheduled task
    */
-  @Cron('0 2 * * *')
   async cleanupOldLogs(): Promise<number> {
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - this.RETENTION_DAYS);

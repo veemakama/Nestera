@@ -1,7 +1,6 @@
 "use client";
 
 import React from "react";
-import Skeleton from "../ui/Skeleton";
 
 interface Transaction {
   id: number;
@@ -111,38 +110,6 @@ const TransactionRow: React.FC<{ transaction: Transaction }> = ({
 };
 
 const RecentTransactionsWidget: React.FC = () => {
-  const isLoading = false; // replace with real loading state when data is fetched
-
-  const widgetStyle = {
-    background: "linear-gradient(180deg, rgba(4,20,22,0.85), rgba(6,18,20,0.75))",
-    border: "1px solid rgba(6,110,110,0.15)",
-    borderRadius: "18px",
-    padding: "24px",
-    color: "#e6ffff",
-    boxShadow: "0 10px 30px rgba(2,12,14,0.6)",
-    backdropFilter: "blur(6px)",
-  };
-
-  if (isLoading) {
-    return (
-      <div style={widgetStyle}>
-        <Skeleton className="h-6 w-44 mb-4" />
-        <div className="flex flex-col gap-3">
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="flex items-center gap-3 py-2">
-              <Skeleton className="h-9 w-9 rounded-lg shrink-0" />
-              <div className="flex-1 space-y-2">
-                <Skeleton className="h-4 w-32" />
-                <Skeleton className="h-3 w-24" />
-              </div>
-              <Skeleton className="h-4 w-16" />
-            </div>
-          ))}
-        </div>
-      </div>
-    );
-  }
-
   const mockTransactions: Transaction[] = [
     {
       id: 1,
@@ -195,7 +162,18 @@ const RecentTransactionsWidget: React.FC = () => {
   ];
 
   return (
-    <div className="relative overflow-hidden rounded-2xl p-24 pb-6 text-[#e6ffff] shadow-[0_10px_30px_rgba(2,12,14,0.6)] backdrop-blur-[6px] border border-[rgba(8,120,120,0.12)] bg-linear-to-b from-[rgba(6,18,20,0.85)] to-[rgba(4,12,14,0.75)]">
+    <div
+      style={{
+        background:
+          "linear-gradient(180deg, rgba(4,20,22,0.85), rgba(6,18,20,0.75))",
+        border: "1px solid rgba(6,110,110,0.15)",
+        borderRadius: "18px",
+        padding: "24px",
+        color: "#e6ffff",
+        boxShadow: "0 10px 30px rgba(2,12,14,0.6)",
+        backdropFilter: "blur(6px)",
+      }}
+    >
       <div className="flex justify-between items-center mb-4">
         <h2 className="text-lg font-bold text-[#dff]">Recent Transactions</h2>
       </div>
@@ -215,7 +193,7 @@ const RecentTransactionsWidget: React.FC = () => {
         </a>
       </div>
 
-      <style>{`
+      <style jsx>{`
         .custom-scrollbar::-webkit-scrollbar {
           width: 6px;
         }

@@ -1,24 +1,13 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
-import {
-  Landmark,
-  Loader2,
-  Search,
-  ChevronDown,
-  LayoutGrid,
-  List,
-} from "lucide-react";
+import React, { useState, useMemo } from "react";
+import { Landmark, Search, ChevronDown, LayoutGrid, List } from "lucide-react";
 import SavingsPoolCard, {
   type SavingsPool,
 } from "@/app/components/dashboard/SavingsPoolCard";
-import { useToast } from "@/app/context/ToastContext";
-import { Button } from "@/app/components/ui/Button";
 
 export default function GoalBasedSavingsPage() {
   const [searchQuery, setSearchQuery] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
-  const toast = useToast();
   // Savings pools data
   const savingsPools: SavingsPool[] = [
     {
@@ -99,13 +88,9 @@ export default function GoalBasedSavingsPage() {
   }, [searchQuery, savingsPools]);
 
   const handleDeposit = (poolId: string) => {
-    toast.info("Deposit flow opening", `Selected pool: ${poolId}`);
+    console.log(`Deposit clicked for pool: ${poolId}`);
+    // Add your deposit logic here
   };
-
-  useEffect(() => {
-    const timeoutId = window.setTimeout(() => setIsLoading(false), 700);
-    return () => window.clearTimeout(timeoutId);
-  }, []);
 
   return (
     <div className="w-full max-w-7xl mx-auto pb-20">
@@ -126,24 +111,24 @@ export default function GoalBasedSavingsPage() {
         </div>
 
         {/* View Toggles & Actions */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex bg-[#0e2330] p-1 rounded-xl border border-white/5" role="group" aria-label="View mode toggle">
-            <Button variant="ghost" size="sm" className="bg-cyan-500/10 text-cyan-400 shadow-sm" aria-label="Grid view" aria-pressed="true">
+        <div className="flex items-center gap-3">
+          <div className="flex bg-[#0e2330] p-1 rounded-xl border border-white/5">
+            <button className="p-2 rounded-lg bg-cyan-500/10 text-cyan-400 shadow-sm">
               <LayoutGrid size={18} />
-            </Button>
-            <Button variant="ghost" size="sm" className="text-[#5e8c96]" aria-label="List view" aria-pressed="false">
+            </button>
+            <button className="p-2 rounded-lg text-[#5e8c96] hover:text-white transition-colors">
               <List size={18} />
-            </Button>
+            </button>
           </div>
-          <Button variant="primary" size="md" className="bg-cyan-500 hover:bg-cyan-400 text-[#061a1a] shadow-lg" aria-label="Create new goal">
+          <button className="px-5 py-2.5 bg-cyan-500 hover:bg-cyan-400 text-[#061a1a] font-bold rounded-xl transition-all shadow-lg active:scale-95">
             Create New Goal
-          </Button>
+          </button>
         </div>
       </div>
 
       {/* Search & Filters Row */}
       <div className="flex flex-wrap items-center gap-4 mb-8">
-        <div className="relative min-w-0 flex-1">
+        <div className="relative flex-1 min-w-[300px]">
           <Search
             className="absolute left-4 top-1/2 -translate-y-1/2 text-[#5e8c96]"
             size={18}
@@ -163,15 +148,17 @@ export default function GoalBasedSavingsPage() {
             { label: "Risk: All Levels", active: false },
             { label: "Sort by: APY", active: false },
           ].map((filter, i) => (
-            <Button
+            <button
               key={i}
-              variant={filter.active ? "outline" : "secondary"}
-              size="md"
-              rightIcon={<ChevronDown size={14} className="opacity-70" />}
-              className={filter.active ? "border-cyan-500/20 text-cyan-400 bg-cyan-500/5" : "bg-[#0e2330] border-white/5 text-[#5e8c96] hover:text-white"}
+              className={`flex items-center gap-2 px-4 py-3 rounded-xl border transition-all ${
+                filter.active
+                  ? "bg-cyan-500/5 border-cyan-500/20 text-cyan-400"
+                  : "bg-[#0e2330] border-white/5 text-[#5e8c96] hover:border-white/10 hover:text-white"
+              }`}
             >
-              {filter.label}
-            </Button>
+              <span className="text-sm font-medium">{filter.label}</span>
+              <ChevronDown size={14} opacity={0.7} />
+            </button>
           ))}
         </div>
       </div>
@@ -186,22 +173,8 @@ export default function GoalBasedSavingsPage() {
         </span>
       </div>
 
-      {isLoading ? (
-        <div className="space-y-4" aria-live="polite" aria-busy="true">
-          <div className="inline-flex items-center gap-2 text-xs text-[#7fa9b0]">
-            <Loader2 size={14} className="animate-spin text-cyan-400" />
-            Loading available pools...
-          </div>
-          <div className="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-            {[1, 2, 3].map((item) => (
-              <div
-                key={item}
-                className="h-[260px] animate-pulse rounded-2xl border border-white/5 bg-white/5"
-              />
-            ))}
-          </div>
-        </div>
-      ) : filteredPools.length > 0 ? (
+      {/* Pools Grid */}
+      {filteredPools.length > 0 ? (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {filteredPools.map((pool) => (
             <SavingsPoolCard
@@ -223,14 +196,12 @@ export default function GoalBasedSavingsPage() {
             Try adjusting your search terms or filters to find what you're
             looking for.
           </p>
-          <Button
-            variant="outline"
-            size="md"
+          <button
             onClick={() => setSearchQuery("")}
-            className="mt-6 border-cyan-500/30 text-cyan-400 bg-cyan-500/10 hover:bg-cyan-500/20"
+            className="mt-6 px-6 py-2.5 bg-cyan-500/10 border border-cyan-500/30 text-cyan-400 rounded-xl font-medium hover:bg-cyan-500/20 transition-all"
           >
             Clear Search
-          </Button>
+          </button>
         </div>
       )}
     </div>
