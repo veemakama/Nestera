@@ -5,8 +5,7 @@ import { useForm } from "react-hook-form";
 import { useFormatter, useTranslations } from "next-intl";
 import { Calendar, CircleDollarSign, Flag, Repeat, ShieldCheck } from "lucide-react";
 import { z } from "zod";
-import { zodFormResolver } from "../../../lib/formResolver";
-import { reportError, trackEvent } from "../../../lib/analytics";
+import { zodResolver } from "@hookform/resolvers/zod";
 
 const isFutureDate = (value: string) => {
   if (!value) {
@@ -52,7 +51,7 @@ export default function CreateGoalForm() {
     watch,
     formState: { errors, isSubmitting, isSubmitSuccessful },
   } = useForm<CreateGoalFormValues>({
-    resolver: zodFormResolver(createGoalSchema),
+    resolver: zodResolver(createGoalSchema),
     mode: "onChange",
     defaultValues: {
       goalName: "",
@@ -74,10 +73,10 @@ export default function CreateGoalForm() {
     try {
       console.log("Create goal submitted:", data);
       await Promise.resolve();
-      trackEvent("form_submit_succeeded", { form: "create_goal" });
+      // Success - could show toast here
       reset();
     } catch (error) {
-      reportError(error, { form: "create_goal" });
+      console.error("Error creating goal:", error);
     }
   };
 
