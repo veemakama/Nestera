@@ -140,6 +140,12 @@ export class MetricsService implements OnModuleInit {
     });
 
     this.registerCounter({
+      name: 'db_slow_queries_total',
+      help: 'Total number of slow database queries exceeding threshold',
+      labels: ['operation', 'entity'],
+    });
+
+    this.registerCounter({
       name: 'db_pool_alerts_total',
       help: 'Total number of database pool alerts fired',
       labels: ['alert_type', 'severity'],

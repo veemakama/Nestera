@@ -1,5 +1,8 @@
 import { TypeOrmModuleOptions } from '@nestjs/typeorm';
 import { ConfigService } from '@nestjs/config';
+import { createQueryPerformanceLogger } from './query-performance.logger';
+
+export const SLOW_QUERY_THRESHOLD_MS = 100;
 
 export interface PoolExtraOptions {
   max: number;
@@ -60,6 +63,8 @@ export function buildTypeOrmModuleOptions(
     type: 'postgres',
     autoLoadEntities: true,
     synchronize: !isProduction,
+    maxQueryExecutionTime: SLOW_QUERY_THRESHOLD_MS,
+    logger: createQueryPerformanceLogger(),
     extra,
   };
 

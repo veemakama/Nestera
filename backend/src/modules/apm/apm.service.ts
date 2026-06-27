@@ -128,6 +128,24 @@ export class ApmService implements OnModuleInit, OnModuleDestroy {
         severity: 'warning',
         enabled: true,
       },
+      {
+        name: 'slow_db_queries',
+        metric: 'db_slow_queries_total',
+        condition: 'gt',
+        threshold: 20,
+        windowMinutes: 5,
+        severity: 'warning',
+        enabled: true,
+      },
+      {
+        name: 'degraded_db_query_latency',
+        metric: 'db_query_duration_seconds',
+        condition: 'gt',
+        threshold: 5,
+        windowMinutes: 5,
+        severity: 'critical',
+        enabled: true,
+      },
     );
   }
 
@@ -282,6 +300,23 @@ export class ApmService implements OnModuleInit, OnModuleDestroy {
         entity,
       },
     );
+  }
+
+  trackSlowQuery(
+    durationMs: number,
+    operation = 'UNKNOWN',
+    entity = 'unknown',
+  ): void {
+    this.metricsService.incrementCounter('db_slow_queries_total', {
+      operation,
+      entity,
+    });
+
+    if (durationMs > 1000) {
+      this.logger.warn(
+        `Critical slow query: ${durationMs}ms on ${entity} (${operation})`,
+      );
+    }
   }
 
   updateDbPoolMetrics(
