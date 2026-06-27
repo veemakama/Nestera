@@ -54,6 +54,11 @@ import { GracefulShutdownService } from './common/services/graceful-shutdown.ser
 import { ApmModule } from './modules/apm/apm.module';
 import { PerformanceModule } from './modules/performance/performance.module';
 import { SandboxModule } from './modules/sandbox/sandbox.module';
+import { StatisticsModule } from './modules/statistics/statistics.module';
+import { FeatureFlagsModule } from './modules/feature-flags/feature-flags.module';
+import { createQueryPerformanceLogger } from './common/database/query-performance.logger';
+
+const SLOW_QUERY_THRESHOLD_MS = 100;
 
 const envValidationSchema = Joi.object({
   NODE_ENV: Joi.string().valid('development', 'production', 'test').required(),
@@ -121,8 +126,11 @@ const envValidationSchema = Joi.object({
             // Attach correlationId from request to every log line
             customProps: (req: import('http').IncomingMessage) => ({
               correlationId:
-                (req as import('http').IncomingMessage & { correlationId?: string })
-                  .correlationId ||
+                (
+                  req as import('http').IncomingMessage & {
+                    correlationId?: string;
+                  }
+                ).correlationId ||
                 req.headers['x-correlation-id'] ||
                 'unknown',
             }),
@@ -163,7 +171,8 @@ const envValidationSchema = Joi.object({
             transport: isProduction
               ? (() => {
                   const logDir = configService.get<string>('LOG_DIR');
-                  const retentionDays = configService.get<number>('LOG_RETENTION_DAYS') ?? 30;
+                  const retentionDays =
+                    configService.get<number>('LOG_RETENTION_DAYS') ?? 30;
                   // File transport for log retention when LOG_DIR is set
                   if (logDir) {
                     return {
@@ -273,6 +282,8 @@ const envValidationSchema = Joi.object({
             url: dbUrl,
             autoLoadEntities: true,
             synchronize: configService.get<string>('NODE_ENV') !== 'production',
+            maxQueryExecutionTime: SLOW_QUERY_THRESHOLD_MS,
+            logger: createQueryPerformanceLogger(),
           };
         }
 
@@ -292,6 +303,8 @@ const envValidationSchema = Joi.object({
           password: configService.get<string>('database.pass'),
           autoLoadEntities: true,
           synchronize: configService.get<string>('NODE_ENV') !== 'production',
+          maxQueryExecutionTime: SLOW_QUERY_THRESHOLD_MS,
+          logger: createQueryPerformanceLogger(),
         };
       },
     }),
@@ -387,5 +400,4 @@ export class AppModule implements NestModule {
       .apply(CorrelationIdMiddleware, CompressionMetricsMiddleware)
       .forRoutes('*');
   }
-}
 }

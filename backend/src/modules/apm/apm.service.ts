@@ -1,7 +1,15 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { MetricsService } from './metrics.service';
-import { DistributedTracingService, TraceContext } from './distributed-tracing.service';
+import {
+  DistributedTracingService,
+  TraceContext,
+} from './distributed-tracing.service';
 
 export interface ErrorEvent {
   id: string;
@@ -87,6 +95,24 @@ export class ApmService implements OnModuleInit, OnModuleDestroy {
         severity: 'warning',
         enabled: true,
       },
+      {
+        name: 'slow_db_queries',
+        metric: 'db_slow_queries_total',
+        condition: 'gt',
+        threshold: 20,
+        windowMinutes: 5,
+        severity: 'warning',
+        enabled: true,
+      },
+      {
+        name: 'degraded_db_query_latency',
+        metric: 'db_query_duration_seconds',
+        condition: 'gt',
+        threshold: 5,
+        windowMinutes: 5,
+        severity: 'critical',
+        enabled: true,
+      },
     );
   }
 
@@ -107,7 +133,7 @@ export class ApmService implements OnModuleInit, OnModuleDestroy {
         | undefined;
       if (!metricData) continue;
 
-      const values = Object.values(metricData.values || {}) as number[];
+      const values = Object.values(metricData.values || {});
       if (values.length === 0) continue;
 
       const total = values.reduce((a, b) => a + b, 0);
@@ -142,7 +168,13 @@ export class ApmService implements OnModuleInit, OnModuleDestroy {
 
   trackError(
     error: Error,
-    context: { route?: string; method?: string; statusCode?: number; userId?: string; traceId?: string },
+    context: {
+      route?: string;
+      method?: string;
+      statusCode?: number;
+      userId?: string;
+      traceId?: string;
+    },
   ): void {
     const key = `${error.constructor.name}:${error.message}`;
     const existing = this.errorRegistry.get(key);
@@ -189,32 +221,69 @@ export class ApmService implements OnModuleInit, OnModuleDestroy {
   }
 
   trackUserRegistration(method: 'email' | 'oauth' | 'wallet'): void {
-    this.metricsService.incrementCounter('user_registrations_total', { method });
+    this.metricsService.incrementCounter('user_registrations_total', {
+      method,
+    });
   }
 
   trackUserLogin(status: 'success' | 'failure' | '2fa_required'): void {
     this.metricsService.incrementCounter('user_logins_total', { status });
   }
 
-  trackSavingsSubscription(productType: string, status: 'created' | 'activated' | 'cancelled'): void {
+  trackSavingsSubscription(
+    productType: string,
+    status: 'created' | 'activated' | 'cancelled',
+  ): void {
     this.metricsService.incrementCounter('savings_subscriptions_total', {
       product_type: productType,
       status,
     });
   }
 
-  trackTransaction(type: string, status: 'pending' | 'completed' | 'failed', amountUsdc?: number): void {
-    this.metricsService.incrementCounter('transactions_total', { type, status });
+  trackTransaction(
+    type: string,
+    status: 'pending' | 'completed' | 'failed',
+    amountUsdc?: number,
+  ): void {
+    this.metricsService.incrementCounter('transactions_total', {
+      type,
+      status,
+    });
     if (amountUsdc !== undefined) {
-      this.metricsService.recordHistogram('transaction_amount_usdc', amountUsdc, { type });
+      this.metricsService.recordHistogram(
+        'transaction_amount_usdc',
+        amountUsdc,
+        { type },
+      );
     }
   }
 
   trackDbQuery(operation: string, entity: string, durationMs: number): void {
-    this.metricsService.recordHistogram('db_query_duration_seconds', durationMs / 1000, {
+    this.metricsService.recordHistogram(
+      'db_query_duration_seconds',
+      durationMs / 1000,
+      {
+        operation,
+        entity,
+      },
+    );
+  }
+
+  trackSlowQuery(
+    durationMs: number,
+    operation = 'UNKNOWN',
+    entity = 'unknown',
+  ): void {
+    this.metricsService.incrementCounter('db_slow_queries_total', {
       operation,
       entity,
     });
+
+    if (durationMs > 1000) {
+      this.logger.warn(
+        `Critical slow query: ${durationMs}ms on ${entity} (${operation})`,
+      );
+    }
   }
 
   updateDbPoolMetrics(active: number, idle: number): void {
@@ -223,7 +292,9 @@ export class ApmService implements OnModuleInit, OnModuleDestroy {
   }
 
   trackTokenRefresh(status: 'success' | 'failure'): void {
-    this.metricsService.incrementCounter('auth_token_refresh_total', { status });
+    this.metricsService.incrementCounter('auth_token_refresh_total', {
+      status,
+    });
   }
 
   trackKycVerification(status: 'approved' | 'rejected' | 'pending'): void {
@@ -254,7 +325,10 @@ export class ApmService implements OnModuleInit, OnModuleDestroy {
     return {
       metrics: this.metricsService.getMetricsSummary(),
       errors: {
-        total: Array.from(this.errorRegistry.values()).reduce((a, e) => a + e.count, 0),
+        total: Array.from(this.errorRegistry.values()).reduce(
+          (a, e) => a + e.count,
+          0,
+        ),
         uniqueTypes: this.errorRegistry.size,
         top: this.getTopErrors(),
       },

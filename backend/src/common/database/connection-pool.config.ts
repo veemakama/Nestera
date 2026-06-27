@@ -1,6 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { DataSource } from 'typeorm';
+import { ApmService } from '../../modules/apm/apm.service';
 
 export interface PoolMetrics {
   activeConnections: number;
@@ -21,6 +22,7 @@ export class ConnectionPoolService implements OnModuleDestroy {
   constructor(
     private configService: ConfigService,
     private dataSource: DataSource,
+    private readonly apmService: ApmService,
   ) {
     this.initializePoolMonitoring();
   }
@@ -59,6 +61,11 @@ export class ConnectionPoolService implements OnModuleDestroy {
       if (this.metrics.length > this.maxMetricsHistory) {
         this.metrics.shift();
       }
+
+      this.apmService.updateDbPoolMetrics(
+        metrics.activeConnections,
+        metrics.idleConnections,
+      );
 
       // Alert on high utilization
       if (metrics.utilizationPercentage > 80) {

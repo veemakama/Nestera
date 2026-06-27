@@ -121,6 +121,12 @@ export class MetricsService implements OnModuleInit {
       labels: [],
     });
 
+    this.registerCounter({
+      name: 'db_slow_queries_total',
+      help: 'Total number of slow database queries exceeding threshold',
+      labels: ['operation', 'entity'],
+    });
+
     // Auth metrics
     this.registerCounter({
       name: 'auth_token_refresh_total',
@@ -175,7 +181,11 @@ export class MetricsService implements OnModuleInit {
     metric.values.set(key, current + value);
   }
 
-  recordHistogram(name: string, value: number, labels: MetricLabels = {}): void {
+  recordHistogram(
+    name: string,
+    value: number,
+    labels: MetricLabels = {},
+  ): void {
     const metric = this.metrics.get(name);
     if (!metric || metric.type !== 'histogram') return;
 
@@ -210,7 +220,8 @@ export class MetricsService implements OnModuleInit {
       if (metric.type === 'counter' || metric.type === 'gauge') {
         for (const [labels, value] of metric.values) {
           const labelStr = labels ? `{${labels}}` : '';
-          lines.push(`${metric.name}${labelStr} ${value}`);
+          const metricValue = value as number;
+          lines.push(`${metric.name}${labelStr} ${metricValue}`);
         }
       } else if (metric.type === 'histogram') {
         for (const [labels, values] of metric.values) {
@@ -226,9 +237,7 @@ export class MetricsService implements OnModuleInit {
             lines.push(`${metric.name}_bucket${bucketLabel} ${count}`);
           }
 
-          const infLabel = labels
-            ? `{${labels},le="+Inf"}`
-            : `{le="+Inf"}`;
+          const infLabel = labels ? `{${labels},le="+Inf"}` : `{le="+Inf"}`;
           lines.push(`${metric.name}_bucket${infLabel} ${nums.length}`);
 
           const sum = nums.reduce((a, b) => a + b, 0);
