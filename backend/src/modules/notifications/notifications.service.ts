@@ -1,10 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { OnEvent } from '@nestjs/event-emitter';
+import { OnEvent, EventEmitter2 } from '@nestjs/event-emitter';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { MoreThan, Repository } from 'typeorm';
 import { Notification, NotificationType } from './entities/notification.entity';
+import { PageDto } from '../../common/dto/page.dto';
+import { PageMetaDto } from '../../common/dto/page-meta.dto';
+import { PageOptionsDto } from '../../common/dto/page-options.dto';
 import {
-  NotificationPreference,
+  UserPreference,
   DigestFrequency,
 } from './entities/notification-preference.entity';
 import { PendingNotification } from './entities/pending-notification.entity';
@@ -14,6 +17,10 @@ import { User } from '../user/entities/user.entity';
 import { WaitlistEntry } from '../savings/entities/waitlist-entry.entity';
 import { WaitlistEvent } from '../savings/entities/waitlist-event.entity';
 import { Role } from '../../common/enums/role.enum';
+import {
+  decodeCursor,
+  encodeCursor,
+} from '../../common/helpers/cursor-pagination.helper';
 
 export interface SweepCompletedEvent {
   userId: string;
@@ -50,6 +57,16 @@ export interface MilestoneAchievedEvent {
   achievedAt: Date;
 }
 
+export interface BadgeEarnedEvent {
+  userId: string;
+  badgeId: string;
+  badgeCode: string;
+  badgeName: string;
+  points: number;
+  earnedAt: Date;
+  metadata?: Record<string, any>;
+}
+
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
@@ -57,8 +74,8 @@ export class NotificationsService {
   constructor(
     @InjectRepository(Notification)
     private readonly notificationRepository: Repository<Notification>,
-    @InjectRepository(NotificationPreference)
-    private readonly preferenceRepository: Repository<NotificationPreference>,
+    @InjectRepository(UserPreference)
+    private readonly preferenceRepository: Repository<UserPreference>,
     @InjectRepository(PendingNotification)
     private readonly pendingRepository: Repository<PendingNotification>,
     @InjectRepository(Delegation)
@@ -70,6 +87,7 @@ export class NotificationsService {
     @InjectRepository(WaitlistEvent)
     private readonly waitlistEventRepository: Repository<WaitlistEvent>,
     private readonly mailService: MailService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   /**
@@ -158,6 +176,64 @@ export class NotificationsService {
     } catch (error) {
       this.logger.error(
         `Error processing milestone.achieved event for user ${event.userId}`,
+        error,
+      );
+    }
+  }
+
+  /**
+   * Listen to badge.earned event and create in-app notification
+   */
+  @OnEvent('badge.earned')
+  async handleBadgeEarned(event: BadgeEarnedEvent): Promise<void> {
+    this.logger.log(
+      `Processing badge.earned event for user ${event.userId}, badge ${event.badgeCode}`,
+    );
+
+    try {
+      const user = await this.userRepository.findOne({
+        where: { id: event.userId },
+      });
+
+      if (!user) {
+        this.logger.warn(
+          `User ${event.userId} not found for badge notification`,
+        );
+        return;
+      }
+
+      const preferences = await this.getOrCreatePreferences(event.userId);
+
+      if (preferences.inAppNotifications) {
+        await this.createNotification({
+          userId: event.userId,
+          type: NotificationType.BADGE_EARNED,
+          title: `Badge Earned: ${event.badgeName}`,
+          message: `Congratulations! You earned the "${event.badgeName}" badge${event.points > 0 ? ` and ${event.points} points!` : '!'}`,
+          metadata: {
+            badgeId: event.badgeId,
+            badgeCode: event.badgeCode,
+            badgeName: event.badgeName,
+            points: event.points,
+            earnedAt: event.earnedAt,
+            ...event.metadata,
+          },
+        });
+      }
+
+      if (preferences.emailNotifications && preferences.badgeNotifications) {
+        await this.mailService.sendBadgeEarnedEmail(
+          user.email,
+          user.name || 'User',
+          event.badgeName,
+          event.points,
+        );
+      }
+
+      this.logger.log(`Badge notification processed for user ${event.userId}`);
+    } catch (error) {
+      this.logger.error(
+        `Error processing badge.earned event for user ${event.userId}`,
         error,
       );
     }
@@ -542,7 +618,35 @@ export class NotificationsService {
       read: false,
     });
 
-    return await this.notificationRepository.save(notification);
+    const savedNotification =
+      await this.notificationRepository.save(notification);
+    this.eventEmitter.emit('notification.created', savedNotification);
+    return savedNotification;
+  }
+
+  async getUnreadNotifications(userId: string): Promise<Notification[]> {
+    return await this.notificationRepository.find({
+      where: { userId, read: false },
+      order: { createdAt: 'ASC' },
+    });
+  }
+
+  async getNotificationsSince(
+    userId: string,
+    since: string | Date,
+  ): Promise<Notification[]> {
+    const sinceDate = typeof since === 'string' ? new Date(since) : since;
+    if (Number.isNaN(sinceDate.getTime())) {
+      return [];
+    }
+
+    return await this.notificationRepository.find({
+      where: {
+        userId,
+        createdAt: MoreThan(sinceDate),
+      },
+      order: { createdAt: 'ASC' },
+    });
   }
 
   /**
@@ -550,18 +654,77 @@ export class NotificationsService {
    */
   async getUserNotifications(
     userId: string,
-    page: number = 1,
-    limit: number = 20,
-  ): Promise<{ notifications: Notification[]; total: number }> {
-    const [notifications, total] =
-      await this.notificationRepository.findAndCount({
-        where: { userId },
-        order: { createdAt: 'DESC' },
-        skip: (page - 1) * limit,
-        take: limit,
-      });
+    pageOptionsDto: PageOptionsDto,
+  ): Promise<PageDto<Notification>> {
+    const pageSize = pageOptionsDto.pageSize;
 
-    return { notifications, total };
+    if (pageOptionsDto.cursor) {
+      const cursor = decodeCursor(pageOptionsDto.cursor);
+      const query = this.notificationRepository
+        .createQueryBuilder('n')
+        .where('n.userId = :userId', { userId })
+        .andWhere(
+          '(n.createdAt < :cursorCreatedAt OR (n.createdAt = :cursorCreatedAt AND n.id < :cursorId))',
+          {
+            cursorCreatedAt: new Date(cursor.createdAt),
+            cursorId: cursor.id,
+          },
+        )
+        .orderBy('n.createdAt', 'DESC')
+        .addOrderBy('n.id', 'DESC')
+        .take(pageSize + 1);
+
+      const rows = await query.getMany();
+      const hasMore = rows.length > pageSize;
+      const notifications = hasMore ? rows.slice(0, pageSize) : rows;
+      const nextCursor =
+        hasMore && notifications.length > 0
+          ? encodeCursor({
+              createdAt:
+                notifications[notifications.length - 1].createdAt.toISOString(),
+              id: notifications[notifications.length - 1].id,
+            })
+          : null;
+      const totalItemCount = pageOptionsDto.shouldIncludeTotal
+        ? await this.notificationRepository.count({
+            where: { userId },
+          })
+        : undefined;
+
+      return new PageDto(
+        notifications,
+        new PageMetaDto({ pageOptionsDto, totalItemCount, nextCursor }),
+      );
+    }
+
+    const rows = await this.notificationRepository
+      .createQueryBuilder('n')
+      .where('n.userId = :userId', { userId })
+      .orderBy('n.createdAt', 'DESC')
+      .addOrderBy('n.id', 'DESC')
+      .skip(pageOptionsDto.skip)
+      .take(pageSize + 1)
+      .getMany();
+    const hasMore = rows.length > pageSize;
+    const notifications = hasMore ? rows.slice(0, pageSize) : rows;
+    const nextCursor =
+      hasMore && notifications.length > 0
+        ? encodeCursor({
+            createdAt:
+              notifications[notifications.length - 1].createdAt.toISOString(),
+            id: notifications[notifications.length - 1].id,
+          })
+        : null;
+    const totalItemCount = pageOptionsDto.shouldIncludeTotal
+      ? await this.notificationRepository.count({
+          where: { userId },
+        })
+      : undefined;
+
+    return new PageDto(
+      notifications,
+      new PageMetaDto({ pageOptionsDto, totalItemCount, nextCursor }),
+    );
   }
 
   /**
@@ -602,9 +765,7 @@ export class NotificationsService {
   /**
    * Get or create notification preferences for user
    */
-  async getOrCreatePreferences(
-    userId: string,
-  ): Promise<NotificationPreference> {
+  async getOrCreatePreferences(userId: string): Promise<UserPreference> {
     let preferences = await this.preferenceRepository.findOne({
       where: { userId },
     });
@@ -618,12 +779,26 @@ export class NotificationsService {
   }
 
   /**
+   * Create default preferences for a user
+   */
+  async createPreferences(userId: string): Promise<UserPreference> {
+    return this.getOrCreatePreferences(userId);
+  }
+
+  /**
+   * Delete preference record for a user, falling back to defaults.
+   */
+  async deletePreferences(userId: string): Promise<void> {
+    await this.preferenceRepository.delete({ userId });
+  }
+
+  /**
    * Update notification preferences
    */
   async updatePreferences(
     userId: string,
-    updates: Partial<NotificationPreference>,
-  ): Promise<NotificationPreference> {
+    updates: Partial<UserPreference>,
+  ): Promise<UserPreference> {
     let preferences = await this.getOrCreatePreferences(userId);
 
     Object.assign(preferences, updates);

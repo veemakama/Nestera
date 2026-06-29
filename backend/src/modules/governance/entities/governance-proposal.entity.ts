@@ -91,6 +91,15 @@ export class GovernanceProposal {
   @Column({ type: 'varchar', length: 50, nullable: true })
   type: ProposalType | null;
 
+  @Column({ type: 'varchar', length: 100, nullable: true })
+  templateId: string | null;
+
+  @Column({ type: 'varchar', length: 20, nullable: true })
+  templateVersion: string | null;
+
+  @Column({ type: 'jsonb', nullable: true })
+  templateParameters: Record<string, unknown> | null;
+
   @Column({ type: 'jsonb', nullable: true })
   action: ProposalActionPayload | null;
 
@@ -122,18 +131,6 @@ export class GovernanceProposal {
   /** Set when proposal is successfully executed */
   @Column({ type: 'timestamptz', nullable: true })
   executedAt: Date | null;
-
-  /** Set when proposal is cancelled by admin */
-  @Column({ type: 'timestamptz', nullable: true })
-  cancelledAt: Date | null;
-
-  /** Admin who cancelled the proposal */
-  @Column({ type: 'uuid', nullable: true })
-  cancelledBy: string | null;
-
-  /** Reason for cancellation */
-  @Column({ type: 'text', nullable: true })
-  cancellationReason: string | null;
 
   @CreateDateColumn()
   createdAt: Date;

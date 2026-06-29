@@ -20,6 +20,7 @@ import { Transaction } from '../transactions/entities/transaction.entity';
 import { User } from '../user/entities/user.entity';
 import { SavingsService as BlockchainSavingsService } from '../blockchain/savings.service';
 import { WaitlistService } from './waitlist.service';
+import { TransactionStateMachineService } from '../../transactions/services/transaction-state-machine.service';
 
 const makeProduct = (overrides: Partial<SavingsProduct> = {}): SavingsProduct =>
   ({
@@ -86,6 +87,7 @@ describe('SavingsService – compareProducts', () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SavingsService,
+        { provide: TransactionStateMachineService, useValue: { transition: jest.fn(), getState: jest.fn() } },
         {
           provide: getRepositoryToken(SavingsProduct),
           useValue: productRepository,
@@ -182,22 +184,22 @@ describe('SavingsService – compareProducts', () => {
     ];
     productRepository.find.mockResolvedValue(products);
 
-    const result = await service.compareProducts(['prod-1', 'prod-2'], 1000);
+    const result = await service.compareProducts(['prod-1', 'prod-2']);
 
     expect(result.cached).toBe(false);
     expect(result.products).toHaveLength(2);
     expect(result.products[0]).toMatchObject({
       id: 'prod-1',
       apy: 8,
-      projectedEarnings: expect.any(Number),
+      riskLevel: 'medium',
+      tenure: null,
     });
     expect(result.products[1]).toMatchObject({
       id: 'prod-2',
       apy: 12,
-      projectedEarnings: expect.any(Number),
+      riskLevel: 'low',
+      tenure: 12,
     });
-    expect(result.recommendation).toBeDefined();
-    expect(result.recommendation?.productId).toBe('prod-2');
   });
 
   it('includes historical performance data for each product', async () => {
@@ -206,30 +208,33 @@ describe('SavingsService – compareProducts', () => {
       makeProduct({ id: 'prod-2', interestRate: 10 }),
     ]);
 
-    const result = await service.compareProducts(['prod-1', 'prod-2'], 1000);
+    const result = await service.compareProducts(['prod-1', 'prod-2']);
 
     for (const product of result.products) {
       expect(product.historicalPerformance).toHaveLength(2);
+      expect(product.historicalPerformance[0]).toHaveProperty('year');
+      expect(product.historicalPerformance[0]).toHaveProperty('return');
     }
   });
 
   it('returns cached: true when result is in cache', async () => {
     const cachedResponse = {
-      products: [],
+      products: [makeProduct() as any],
       cached: false,
     };
     cacheManager.get.mockResolvedValue(cachedResponse);
 
-    const result = await service.compareProducts(['prod-1', 'prod-2'], 1000);
+    const result = await service.compareProducts(['prod-1', 'prod-2']);
 
     expect(result.cached).toBe(true);
+    expect(productRepository.find).not.toHaveBeenCalled();
   });
 
   it('throws NotFoundException when a product ID does not exist', async () => {
     productRepository.find.mockResolvedValue([makeProduct({ id: 'prod-1' })]);
 
     await expect(
-      service.compareProducts(['prod-1', 'prod-missing'], 1000),
+      service.compareProducts(['prod-1', 'prod-missing']),
     ).rejects.toThrow(NotFoundException);
   });
 
@@ -239,8 +244,12 @@ describe('SavingsService – compareProducts', () => {
       makeProduct({ id: 'prod-2' }),
     ]);
 
-    await service.compareProducts(['prod-1', 'prod-2'], 1000);
+    await service.compareProducts(['prod-1', 'prod-2']);
 
-    expect(cacheManager.set).toHaveBeenCalled();
+    expect(cacheManager.set).toHaveBeenCalledWith(
+      expect.stringContaining('compare:'),
+      expect.objectContaining({ cached: false }),
+      expect.any(Number),
+    );
   });
 });

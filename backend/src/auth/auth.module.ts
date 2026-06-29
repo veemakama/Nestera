@@ -3,24 +3,19 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ConfigModule, ConfigService } from '@nestjs/config';
+// import { CacheModule } from '@nestjs/cache-manager';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { UserModule } from '../modules/user/user.module';
 import { AuthService } from './auth.service';
 import { TwoFactorService } from './two-factor.service';
 import { AuthController } from './auth.controller';
 import { User } from '../modules/user/entities/user.entity';
-import { RefreshToken } from './entities/refresh-token.entity';
-import { Session } from './entities/session.entity';
 import { CacheModule } from '../modules/cache/cache.module';
-import { CacheStrategyService } from '../modules/cache/cache-strategy.service';
-import { AuthRateLimitService } from './services/auth-rate-limit.service';
-import { AuthRateLimitGuard } from './guards/auth-rate-limit.guard';
-import { AuthSecurityAdminController } from './controllers/auth-security-admin.controller';
 
 @Module({
   imports: [
     UserModule,
-    TypeOrmModule.forFeature([User, RefreshToken, Session]),
+    TypeOrmModule.forFeature([User]),
     CacheModule,
     PassportModule.register({ defaultStrategy: 'jwt' }),
     JwtModule.registerAsync({
@@ -37,21 +32,8 @@ import { AuthSecurityAdminController } from './controllers/auth-security-admin.c
       },
     }),
   ],
-  controllers: [AuthController, AuthSecurityAdminController],
-  providers: [
-    AuthService,
-    TwoFactorService,
-    JwtStrategy,
-    CacheStrategyService,
-    AuthRateLimitService,
-    AuthRateLimitGuard,
-  ],
-  exports: [
-    AuthService,
-    TwoFactorService,
-    JwtModule,
-    PassportModule,
-    AuthRateLimitService,
-  ],
+  controllers: [AuthController],
+  providers: [AuthService, TwoFactorService, JwtStrategy],
+  exports: [AuthService, TwoFactorService, JwtModule, PassportModule],
 })
 export class AuthModule {}

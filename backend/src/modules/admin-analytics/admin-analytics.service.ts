@@ -32,8 +32,7 @@ import {
   DateRangeFilterDto,
   DateRange,
 } from '../admin/dto/admin-analytics.dto';
-import { DataScopeService } from '../../common/services/data-scope.service';
-import { Role } from '../../common/enums/role.enum';
+import { ShutdownTrackedTask } from '../../common/decorators/shutdown-task.decorator';
 
 @Injectable()
 export class AdminAnalyticsService {
@@ -101,6 +100,7 @@ export class AdminAnalyticsService {
    * Cron job that runs daily at 12:00 UTC to snapshot global TVL
    * Schedule: 0 0 12 * * * (12:00 UTC every day)
    */
+  @ShutdownTrackedTask()
   @Cron('0 0 12 * * *')
   async snapshotGlobalTvl(): Promise<void> {
     this.logger.log('Starting global TVL snapshot job...');

@@ -10,7 +10,6 @@ import {
 import { SavingsService as BlockchainSavingsService } from '../blockchain/savings.service';
 import { StellarService } from '../blockchain/stellar.service';
 import { OracleService } from '../blockchain/oracle.service';
-import { SavingsProduct } from '../savings/entities/savings-product.entity';
 
 describe('AnalyticsService - Yield Breakdown', () => {
   let service: AnalyticsService;
@@ -35,10 +34,6 @@ describe('AnalyticsService - Yield Breakdown', () => {
         {
           provide: getRepositoryToken(LedgerTransaction),
           useValue: transactionRepository,
-        },
-        {
-          provide: getRepositoryToken(SavingsProduct),
-          useValue: { createQueryBuilder: jest.fn() },
         },
         {
           provide: BlockchainSavingsService,

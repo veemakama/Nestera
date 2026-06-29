@@ -1,21 +1,12 @@
-"use client";
+'use client';
 
-import React, {
-  createContext,
-  useCallback,
-  useContext,
-  useEffect,
-  useState,
-  useRef,
-} from "react";
-import {
-  isConnected,
-  getAddress,
-  getNetwork,
-  requestAccess,
-  WatchWalletChanges,
-} from "@stellar/freighter-api";
-import { Horizon } from "@stellar/stellar-sdk";
+import React, { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { useWalletWebSocket } from '../hooks/useWalletWebSocket';
+import { usePrices, getAssetPrice } from '../hooks/usePrices';
+import { env } from '../lib/env';
+import { queryClient } from './QueryProvider';
+import { rateLimitedFetch } from '../lib/api-client';
+import { captureWalletError, addBreadcrumb } from '../lib/monitoring';
 
 interface Balance {
   asset_code: string;
@@ -24,6 +15,14 @@ interface Balance {
   asset_issuer?: string;
   usd_value: number;
 }
+
+export type ConnectionStatus =
+  | 'idle'
+  | 'connecting'
+  | 'connected'
+  | 'disconnected'
+  | 'locked'
+  | 'error';
 
 interface WalletState {
   address: string | null;
@@ -36,75 +35,120 @@ interface WalletState {
   balances: Balance[];
   totalUsdValue: number;
   lastBalanceSync: number | null;
+  connectionStatus: ConnectionStatus;
 }
 
 interface WalletContextValue extends WalletState {
   connect: () => Promise<void>;
   disconnect: () => void;
+  reconnect: () => Promise<void>;
   fetchBalances: () => Promise<void>;
+  optimisticUpdateBalance: (assetCode: string, newBalance: string) => void;
+  rollbackBalance: (assetCode: string, originalBalance: string) => void;
 }
 
 const WalletContext = createContext<WalletContextValue | null>(null);
 
-const COINGECKO_IDS: Record<string, string> = {
-  XLM: "stellar",
-  USDC: "usd-coin",
-  AQUA: "aqua",
+const STORAGE_KEY = 'nestera_wallet_network';
+
+type FreighterLike = {
+  isConnected?: () => Promise<{ isConnected?: boolean } | boolean>;
+  getAddress?: () => Promise<{ address?: string } | string>;
+  getNetwork?: () => Promise<{ network?: string } | string>;
+  requestAccess?: () => Promise<{ address?: string; error?: string } | string>;
+};
+
+type HorizonBalance = {
+  asset_type: string;
+  asset_code?: string;
+  asset_issuer?: string;
+  balance: string;
+};
+
+const getFreighter = (): FreighterLike | undefined => {
+  if (typeof window === 'undefined') return undefined;
+  return (window as typeof window & { freighter?: FreighterLike }).freighter;
+};
+
+const readAddress = async (freighter: FreighterLike) => {
+  const result = await freighter.getAddress?.();
+  return typeof result === 'string' ? result : (result?.address ?? null);
+};
+
+const readNetwork = async (freighter: FreighterLike) => {
+  const result = await freighter.getNetwork?.();
+  return typeof result === 'string' ? result : (result?.network ?? null);
+};
+
+const readConnection = async (freighter: FreighterLike) => {
+  const result = await freighter.isConnected?.();
+  return typeof result === 'boolean' ? result : !!result?.isConnected;
+};
+
+const INITIAL_STATE: WalletState = {
+  address: null,
+  network: null,
+  isConnected: false,
+  isLoading: false,
+  isBalancesLoading: false,
+  error: null,
+  balanceError: null,
+  balances: [],
+  totalUsdValue: 0,
+  lastBalanceSync: null,
+  connectionStatus: 'idle',
 };
 
 export function WalletProvider({ children }: { children: React.ReactNode }) {
-  const [state, setState] = useState<WalletState>({
-    address: null,
-    network: null,
-    isConnected: false,
-    isLoading: false,
-    isBalancesLoading: false,
-    error: null,
-    balanceError: null,
-    balances: [],
-    totalUsdValue: 0,
-    lastBalanceSync: null,
-  });
+  const [state, setState] = useState<WalletState>(INITIAL_STATE);
+  // Removed refreshInterval and polling logic; will use WebSocket for live balances.
+  // We'll keep the ref for potential fallback polling.
+  const refreshInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+  const disconnectCheckInterval = useRef<ReturnType<typeof setInterval> | null>(null);
+  const connectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { data: prices } = usePrices();
 
-  const refreshInterval = useRef<NodeJS.Timeout | null>(null);
-  const networkWatcher = useRef<WatchWalletChanges | null>(null);
-
-  const getHorizonUrl = (network: string | null) => {
-    return network?.toLowerCase() === "public"
-      ? "https://horizon.stellar.org"
-      : "https://horizon-testnet.stellar.org";
-  };
+  const getHorizonUrl = (network: string | null) =>
+    network?.toLowerCase() === 'public' ? env.horizonPublic : env.horizonTestnet;
 
   const fetchBalances = useCallback(async () => {
-    if (!state.address) return;
+    if (!state.address) {
+      queryClient.removeQueries({ queryKey: ['balances'] });
+      return;
+    }
+
+    // Removed fetchBalances polling interval references elsewhere; unchanged.
 
     setState((s) => ({ ...s, isBalancesLoading: true, balanceError: null }));
 
+    addBreadcrumb({
+      message: 'Fetching wallet balances',
+      category: 'wallet',
+      data: { network: state.network },
+      level: 'info',
+    });
+
     try {
-      const horizonUrl = getHorizonUrl(state.network);
-      const server = new Horizon.Server(horizonUrl);
-      const account = await server.loadAccount(state.address);
+      const horizonUrl = getHorizonUrl(state.network).replace(/\/$/, '');
+      const res = await rateLimitedFetch(`${horizonUrl}/accounts/${state.address}`);
+      if (!res.ok) {
+        throw new Error('Unable to refresh wallet balances.');
+      }
 
-      // Fetch prices
-      const assetIds = Object.values(COINGECKO_IDS).join(",");
-      const priceRes = await fetch(
-        `https://api.coingecko.com/api/v3/simple/price?ids=${assetIds}&vs_currencies=usd`
-      );
-      const prices = await priceRes.json();
-
+      const account = await res.json();
       let totalUsd = 0;
-      const balances: Balance[] = account.balances.map((b: any) => {
-        const code = b.asset_type === "native" ? "XLM" : b.asset_code;
-        const coingeckoId = COINGECKO_IDS[code];
-        const price = prices[coingeckoId]?.usd || (code === "USDC" ? 1 : 0);
-        const usdValue = parseFloat(b.balance) * price;
+
+      const balances: Balance[] = ((account.balances ?? []) as HorizonBalance[]).map((balance) => {
+        const code = balance.asset_type === 'native' ? 'XLM' : (balance.asset_code ?? 'UNKNOWN');
+        const price = getAssetPrice(prices, code);
+        const usdValue = parseFloat(balance.balance) * price;
         totalUsd += usdValue;
 
         return {
           asset_code: code,
-          balance: b.balance,
-          asset_type: b.asset_type,
-          asset_issuer: b.asset_issuer,
+          balance: balance.balance,
+          asset_type: balance.asset_type,
+          asset_issuer: balance.asset_issuer,
           usd_value: usdValue,
         };
       });
@@ -117,57 +161,119 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         balanceError: null,
         lastBalanceSync: Date.now(),
       }));
-    } catch (err) {
-      console.error("Failed to fetch balances:", err);
+    } catch (error) {
+      captureWalletError(error, 'fetchBalances', state.address);
       setState((s) => ({
         ...s,
         isBalancesLoading: false,
-        balanceError:
-          err instanceof Error ? err.message : "Unable to refresh wallet balances.",
+        balanceError: error instanceof Error ? error.message : 'Unable to refresh wallet balances.',
       }));
     }
-  }, [state.address, state.network]);
+  }, [state.address, state.network, prices]);
 
-  // Restore session on mount
   useEffect(() => {
+    const savedNetwork = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
+
     (async () => {
       try {
-        const connected = await isConnected();
-        if (connected?.isConnected) {
-          const [addrResult, netResult] = await Promise.all([
-            getAddress(),
-            getNetwork(),
+        const freighter = getFreighter();
+        const connected = freighter ? await readConnection(freighter) : false;
+        if (connected && freighter) {
+          const [address, walletNetwork] = await Promise.all([
+            readAddress(freighter),
+            readNetwork(freighter),
           ]);
-          if (addrResult?.address) {
+          if (address) {
+            const network = walletNetwork ?? savedNetwork ?? null;
+            if (network) localStorage.setItem(STORAGE_KEY, network);
             setState((s) => ({
               ...s,
-              address: addrResult.address,
-              network: netResult?.network ?? null,
+              address,
+              network,
               isConnected: true,
-              isLoading: false,
-              error: null,
+              connectionStatus: 'connected',
             }));
           }
+        } else {
+          setState((s) => ({
+            ...s,
+            connectionStatus: savedNetwork ? 'disconnected' : 'idle',
+          }));
         }
       } catch {
-        // Freighter not installed or not connected — silent fail
+        setState((s) => ({ ...s, connectionStatus: 'idle' }));
       }
     })();
   }, []);
 
-  // Fetch balances when address changes
   useEffect(() => {
-    if (state.address) {
-      fetchBalances();
+    if (!state.isConnected) return;
 
-      // Real-time updates every 30 seconds
+    disconnectCheckInterval.current = setInterval(async () => {
+      try {
+        const freighter = getFreighter();
+        const connected = freighter ? await readConnection(freighter) : false;
+        if (!connected) {
+          queryClient.removeQueries({ queryKey: ['balances'] });
+          setState((s) => ({
+            ...s,
+            isConnected: false,
+            connectionStatus: 'locked',
+            address: null,
+            balances: [],
+            totalUsdValue: 0,
+            isBalancesLoading: false,
+            lastBalanceSync: null,
+          }));
+        }
+      } catch {
+        // Freighter can be unavailable while the extension reloads.
+      }
+    }, 5000);
+
+    return () => {
+      if (disconnectCheckInterval.current) {
+        clearInterval(disconnectCheckInterval.current);
+        disconnectCheckInterval.current = null;
+      }
+    };
+  }, [state.isConnected]);
+
+  // Use WebSocket for real-time balances
+  const {
+    balances: wsBalances,
+    status: wsStatus,
+    error: wsError,
+  } = useWalletWebSocket(state.address);
+
+  // Sync WebSocket balances to state
+  useEffect(() => {
+    if (wsBalances && wsBalances.length > 0) {
+      const totalUsd = wsBalances.reduce(
+        (acc: number, b: { usd_value: number }) => acc + b.usd_value,
+        0,
+      );
+      setState((s) => ({
+        ...s,
+        balances: wsBalances,
+        totalUsdValue: totalUsd,
+        isBalancesLoading: false,
+        balanceError: null,
+        lastBalanceSync: Date.now(),
+      }));
+    }
+    if (wsError) {
+      // fallback to polling if WebSocket fails
+      fetchBalances();
       if (refreshInterval.current) clearInterval(refreshInterval.current);
       refreshInterval.current = setInterval(fetchBalances, 30000);
-    } else {
-      if (refreshInterval.current) {
-        clearInterval(refreshInterval.current);
-        refreshInterval.current = null;
-      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wsBalances, wsError, state.address]);
+
+  // Cleanup when address changes
+  useEffect(() => {
+    if (!state.address) {
       setState((s) => ({
         ...s,
         balances: [],
@@ -177,108 +283,144 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
         lastBalanceSync: null,
       }));
     }
+  }, [state.address]);
 
-    return () => {
-      if (refreshInterval.current) clearInterval(refreshInterval.current);
-    };
-  }, [state.address, fetchBalances]);
-
-  // Watch for network changes when wallet is connected
-  useEffect(() => {
-    if (!state.isConnected) {
-      // Clean up watcher when wallet is disconnected
-      if (networkWatcher.current) {
-        try {
-          networkWatcher.current.stop();
-        } catch (error) {
-          console.error("Error stopping network watcher:", error);
-        }
-        networkWatcher.current = null;
-      }
-      return;
-    }
-
-    try {
-      // Initialize watcher to poll every 3 seconds
-      networkWatcher.current = new WatchWalletChanges(3000);
-
-      networkWatcher.current.watch((changes) => {
-        if (changes.network && changes.network !== state.network) {
-          setState((prevState) => ({
-            ...prevState,
-            network: changes.network,
-          }));
-        }
-      });
-    } catch (error) {
-      console.error("Failed to initialize network watcher:", error);
-    }
-
-    // Cleanup function
-    return () => {
-      if (networkWatcher.current) {
-        try {
-          networkWatcher.current.stop();
-        } catch (error) {
-          console.error("Error stopping network watcher:", error);
-        }
-        networkWatcher.current = null;
-      }
-    };
-  }, [state.isConnected, state.network]);
+  // Remove old polling interval effect
+  // (the block from lines 233-257 has been replaced)
 
   const connect = useCallback(async () => {
-    setState((s) => ({ ...s, isLoading: true, error: null }));
+    setState((s) => ({ ...s, isLoading: true, error: null, connectionStatus: 'connecting' }));
+
+    addBreadcrumb({
+      message: 'Wallet connect initiated',
+      category: 'wallet',
+      level: 'info',
+    });
+
     try {
-      const accessResult = await requestAccess();
-      if (accessResult?.error) {
+      if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current);
+      connectTimeoutRef.current = setTimeout(() => {
+        const timeoutError = new Error('Connection timed out');
+        captureWalletError(timeoutError, 'connect_timeout');
         setState((s) => ({
           ...s,
           isLoading: false,
-          error: accessResult.error ?? "Connection rejected",
+          connectionStatus: 'error',
+          error: 'Connection timed out',
+        }));
+      }, 15000);
+
+      const freighter = getFreighter();
+      if (!freighter?.requestAccess) {
+        throw new Error('Freighter wallet extension is not available.');
+      }
+
+      const accessResult = await freighter.requestAccess();
+      const accessError = typeof accessResult === 'string' ? null : accessResult?.error;
+      if (accessError) {
+        if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current);
+        connectTimeoutRef.current = null;
+        captureWalletError(new Error(accessError), 'connect_rejected');
+        setState((s) => ({
+          ...s,
+          isLoading: false,
+          error: accessError ?? 'Connection rejected',
+          connectionStatus: 'error',
         }));
         return;
       }
-      const [addrResult, netResult] = await Promise.all([
-        getAddress(),
-        getNetwork(),
+
+      const [address, walletNetwork] = await Promise.all([
+        readAddress(freighter),
+        readNetwork(freighter),
       ]);
+      if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current);
+      connectTimeoutRef.current = null;
+
+      const network = walletNetwork ?? null;
+      if (network) localStorage.setItem(STORAGE_KEY, network);
+
+      addBreadcrumb({
+        message: 'Wallet connected successfully',
+        category: 'wallet',
+        data: { network },
+        level: 'info',
+      });
+
       setState((s) => ({
         ...s,
-        address: addrResult?.address ?? null,
-        network: netResult?.network ?? null,
-        isConnected: !!addrResult?.address,
+        address,
+        network,
+        isConnected: !!address,
         isLoading: false,
         error: null,
         balanceError: null,
+        connectionStatus: address ? 'connected' : 'error',
       }));
-    } catch (err) {
+    } catch (error) {
+      if (connectTimeoutRef.current) clearTimeout(connectTimeoutRef.current);
+      connectTimeoutRef.current = null;
+      captureWalletError(error, 'connect');
       setState((s) => ({
         ...s,
         isLoading: false,
-        error: err instanceof Error ? err.message : "Failed to connect wallet",
+        error: error instanceof Error ? error.message : 'Failed to connect wallet',
+        connectionStatus: 'error',
       }));
     }
   }, []);
 
+  const reconnect = useCallback(async () => {
+    setState((s) => ({ ...s, error: null, connectionStatus: 'connecting' }));
+    await connect();
+  }, [connect]);
+
   const disconnect = useCallback(() => {
-    setState((s) => ({
-      ...s,
-      address: null,
-      network: null,
-      isConnected: false,
-      isLoading: false,
-      error: null,
-      balanceError: null,
-      balances: [],
-      totalUsdValue: 0,
-      isBalancesLoading: false,
-      lastBalanceSync: null,
-    }));
+    localStorage.removeItem(STORAGE_KEY);
+    queryClient.removeQueries({ queryKey: ['balances'] });
+    setState({ ...INITIAL_STATE, connectionStatus: 'idle' });
+  }, []);
+
+  const optimisticUpdateBalance = useCallback((assetCode: string, newBalance: string) => {
+    setState((s) => {
+      const updatedBalances = s.balances.map((b) =>
+        b.asset_code === assetCode ? { ...b, balance: newBalance } : b,
+      );
+      const totalUsd = updatedBalances.reduce((acc, b) => acc + b.usd_value, 0);
+      return {
+        ...s,
+        balances: updatedBalances,
+        totalUsdValue: totalUsd,
+      };
+    });
+  }, []);
+
+  const rollbackBalance = useCallback((assetCode: string, originalBalance: string) => {
+    setState((s) => {
+      const rolledBackBalances = s.balances.map((b) =>
+        b.asset_code === assetCode ? { ...b, balance: originalBalance } : b,
+      );
+      const totalUsd = rolledBackBalances.reduce((acc, b) => acc + b.usd_value, 0);
+      return {
+        ...s,
+        balances: rolledBackBalances,
+        totalUsdValue: totalUsd,
+      };
+    });
   }, []);
 
   return (
-    <WalletContext.Provider value={{ ...state, connect, disconnect, fetchBalances }}>
+    <WalletContext.Provider
+      value={{
+        ...state,
+        connect,
+        disconnect,
+        reconnect,
+        fetchBalances,
+        optimisticUpdateBalance,
+        rollbackBalance,
+      }}
+    >
       {children}
     </WalletContext.Provider>
   );
@@ -286,6 +428,6 @@ export function WalletProvider({ children }: { children: React.ReactNode }) {
 
 export function useWallet(): WalletContextValue {
   const ctx = useContext(WalletContext);
-  if (!ctx) throw new Error("useWallet must be used within WalletProvider");
+  if (!ctx) throw new Error('useWallet must be used within WalletProvider');
   return ctx;
 }

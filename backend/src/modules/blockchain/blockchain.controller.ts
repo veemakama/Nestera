@@ -1,13 +1,8 @@
-import { Controller, Get, Param, Post, Query } from '@nestjs/common';
-import {
-  ApiOperation,
-  ApiParam,
-  ApiResponse,
-  ApiTags,
-  ApiQuery,
-} from '@nestjs/swagger';
+import { Controller, Get, Param, Post } from '@nestjs/common';
+import { ApiOperation, ApiParam, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { StellarService } from './stellar.service';
 import { BalanceSyncService } from './balance-sync.service';
+import { IndexerService } from './indexer.service';
 import { TransactionDto } from './dto/transaction.dto';
 
 @ApiTags('Blockchain')
@@ -16,6 +11,7 @@ export class BlockchainController {
   constructor(
     private readonly stellarService: StellarService,
     private readonly balanceSyncService: BalanceSyncService,
+    private readonly indexerService: IndexerService,
   ) {}
 
   @Post('wallets/generate')
@@ -26,62 +22,22 @@ export class BlockchainController {
 
   @Get('wallets/:publicKey/transactions')
   @ApiOperation({
-    summary: 'Get paginated recent on-chain transactions for a Stellar wallet',
+    summary: 'Get recent on-chain transactions for a Stellar wallet',
   })
   @ApiParam({
     name: 'publicKey',
     description: 'The Stellar public key (starting with G) of the wallet',
     example: 'GAAZI4TCR3TY5OJHCTJC2A4QSY6CJWJH5IAJTGKIN2ER7LBNVKOCCWN',
   })
-  @ApiQuery({
-    name: 'limit',
-    description: 'Number of transactions per page (default 10, max 200)',
-    required: false,
-    example: 10,
-  })
-  @ApiQuery({
-    name: 'cursor',
-    description: 'Pagination cursor (transaction hash) for fetching next page',
-    required: false,
-  })
   @ApiResponse({
     status: 200,
-    description:
-      'Paginated transactions with cursor for pagination and hasMore flag',
-    schema: {
-      type: 'object',
-      properties: {
-        records: {
-          type: 'array',
-          items: { $ref: '#/components/schemas/TransactionDto' },
-        },
-        nextCursor: { type: 'string', nullable: true },
-        hasMore: { type: 'boolean' },
-      },
-    },
+    description: 'Array of recent transactions mapped to sanitized objects',
+    type: [TransactionDto],
   })
-  async getWalletTransactions(
+  getWalletTransactions(
     @Param('publicKey') publicKey: string,
-    @Query('limit') limit?: number,
-    @Query('cursor') cursor?: string,
-  ): Promise<any> {
-    const sanitizedLimit = limit ? Math.min(Math.max(limit, 1), 200) : 10;
-    const res =
-      limit === undefined && cursor === undefined
-        ? await this.stellarService.getRecentTransactions(publicKey)
-        : await this.stellarService.getRecentTransactions(
-            publicKey,
-            sanitizedLimit,
-            cursor,
-          );
-
-    if (Array.isArray(res)) return res;
-    // If paginated result returned and no cursor provided, return records for backward compatibility
-    if (!cursor && res && typeof res === 'object' && 'records' in res) {
-      return (res as { records: TransactionDto[] }).records;
-    }
-
-    return res;
+  ): Promise<TransactionDto[]> {
+    return this.stellarService.getRecentTransactions(publicKey);
   }
 
   @Get('rpc/status')
@@ -109,5 +65,25 @@ export class BlockchainController {
   })
   getBalanceSyncMetrics() {
     return this.balanceSyncService.getMetricsSummary();
+  }
+
+  @Get('indexer/status')
+  @ApiOperation({
+    summary: 'Get contract event indexer status for monitoring dashboard',
+  })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Indexer state including ledger position, event counts, and monitored contracts',
+  })
+  getIndexerStatus() {
+    const state = this.indexerService.getIndexerState();
+    return {
+      lastProcessedLedger: state?.lastProcessedLedger ?? 0,
+      lastProcessedTimestamp: state?.lastProcessedTimestamp ?? null,
+      totalEventsProcessed: state?.totalEventsProcessed ?? 0,
+      totalEventsFailed: state?.totalEventsFailed ?? 0,
+      monitoredContracts: this.indexerService.getMonitoredContracts(),
+    };
   }
 }

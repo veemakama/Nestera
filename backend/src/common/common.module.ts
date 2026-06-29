@@ -1,30 +1,41 @@
 import { Global, Module } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
 import { PiiEncryptionService } from './services/pii-encryption.service';
 import { RateLimitMonitorService } from './services/rate-limit-monitor.service';
-import { CacheInvalidationService } from './cache/cache-invalidation.service';
-import { MetricsService } from './metrics/metrics.service';
-import { ObservabilityDashboardService } from './metrics/observability-dashboard.service';
-import { ObservabilityDashboardController } from './metrics/observability-dashboard.controller';
-import { DataScopeService } from './services/data-scope.service';
+import { SecretsConfigService } from './services/secrets-config.service';
+import { IdempotencyService } from './services/idempotency.service';
+import { IdempotencyCleanupService } from './services/idempotency-cleanup.service';
+import { LogSanitizerService } from './services/log-sanitizer.service';
+import { CompressionMetricsService } from './services/compression-metrics.service';
+import { CompressionMetricsMiddleware } from './middleware/compression.middleware';
+import { AuditLogService } from './services/audit-log.service';
+import { CacheModule } from '../modules/cache/cache.module';
+import { AuditLog } from './entities/audit-log.entity';
+import { DistributedLockModule } from './distributed-lock/distributed-lock.module';
 
 @Global()
 @Module({
+  imports: [CacheModule, TypeOrmModule.forFeature([AuditLog])],
   providers: [
     RateLimitMonitorService,
     PiiEncryptionService,
-    CacheInvalidationService,
-    MetricsService,
-    ObservabilityDashboardService,
-    DataScopeService,
+    SecretsConfigService,
+    IdempotencyService,
+    IdempotencyCleanupService,
+    LogSanitizerService,
+    CompressionMetricsService,
+    CompressionMetricsMiddleware,
+    AuditLogService,
   ],
-  controllers: [ObservabilityDashboardController],
   exports: [
     RateLimitMonitorService,
     PiiEncryptionService,
-    CacheInvalidationService,
-    MetricsService,
-    ObservabilityDashboardService,
-    DataScopeService,
+    SecretsConfigService,
+    IdempotencyService,
+    LogSanitizerService,
+    CompressionMetricsService,
+    AuditLogService,
+    DistributedLockModule,
   ],
 })
 export class CommonModule {}

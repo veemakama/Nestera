@@ -4,6 +4,7 @@ import {
   AutoDepositFrequency,
   AutoDepositStatus,
 } from '../entities/auto-deposit-schedule.entity';
+import { IsPositiveAmount } from '../../../common/validators/is-positive-amount.validator';
 
 export class CreateAutoDepositDto {
   @ApiProperty({
@@ -19,6 +20,7 @@ export class CreateAutoDepositDto {
     minimum: 0.01,
   })
   @IsNumber()
+  @IsPositiveAmount()
   @Min(0.01)
   amount: number;
 

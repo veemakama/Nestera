@@ -9,6 +9,7 @@ import {
   Dispute,
   DisputeMessage,
   DisputeStatus,
+  DisputeTimeline,
 } from './entities/dispute.entity';
 import { MedicalClaim } from '../claims/entities/medical-claim.entity';
 import {
@@ -16,9 +17,49 @@ import {
   UpdateDisputeDto,
   AddDisputeMessageDto,
 } from './dto/dispute.dto';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationType } from '../notifications/entities/notification.entity';
+
+const ALLOWED_TRANSITIONS: Record<DisputeStatus, DisputeStatus[]> = {
+  [DisputeStatus.OPEN]: [
+    DisputeStatus.IN_PROGRESS,
+    DisputeStatus.UNDER_REVIEW,
+    DisputeStatus.CLOSED,
+  ],
+  [DisputeStatus.IN_PROGRESS]: [
+    DisputeStatus.UNDER_REVIEW,
+    DisputeStatus.RESOLVED,
+    DisputeStatus.CLOSED,
+  ],
+  [DisputeStatus.UNDER_REVIEW]: [
+    DisputeStatus.RESOLVED,
+    DisputeStatus.ESCALATED,
+    DisputeStatus.CLOSED,
+  ],
+  [DisputeStatus.RESOLVED]: [DisputeStatus.CLOSED, DisputeStatus.OPEN],
+  [DisputeStatus.CLOSED]: [],
+  [DisputeStatus.ESCALATED]: [
+    DisputeStatus.UNDER_REVIEW,
+    DisputeStatus.RESOLVED,
+    DisputeStatus.CLOSED,
+  ],
+};
 
 @Injectable()
 export class DisputesService {
+  private assertValidTransition(
+    current: DisputeStatus,
+    next: DisputeStatus,
+    action: string,
+  ): void {
+    const allowed = ALLOWED_TRANSITIONS[current];
+    if (!allowed.includes(next)) {
+      throw new BadRequestException(
+        `Cannot ${action}: transition from ${current} to ${next} is not allowed`,
+      );
+    }
+  }
+
   constructor(
     @InjectRepository(Dispute)
     private readonly disputeRepository: Repository<Dispute>,
@@ -26,6 +67,9 @@ export class DisputesService {
     private readonly messageRepository: Repository<DisputeMessage>,
     @InjectRepository(MedicalClaim)
     private readonly claimRepository: Repository<MedicalClaim>,
+    @InjectRepository(DisputeTimeline)
+    private readonly timelineRepository: Repository<DisputeTimeline>,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async createDispute(createDisputeDto: CreateDisputeDto): Promise<Dispute> {
@@ -40,13 +84,29 @@ export class DisputesService {
       ...createDisputeDto,
       status: DisputeStatus.OPEN,
     });
+    const savedDispute = await this.disputeRepository.save(dispute);
 
-    return await this.disputeRepository.save(dispute);
+    // Add timeline entry
+    await this.timelineRepository.save(
+      this.timelineRepository.create({
+        disputeId: savedDispute.id,
+        action: 'CREATED',
+        performedBy: savedDispute.disputedBy,
+        description: 'Dispute created',
+      }),
+    );
+
+    // Notify (in a real app, we'd notify the claim owner or admins)
+    // For now, let's just assume there's a way to find them.
+    // For demo, we'll skip actual notification to a specific user since we don't have user ID of claim owner here easily without more queries.
+    // But we can log it.
+
+    return savedDispute;
   }
 
   async findAll(): Promise<Dispute[]> {
     return await this.disputeRepository.find({
-      relations: ['claim', 'messages'],
+      relations: ['claim', 'messages', 'timeline'],
       order: { createdAt: 'DESC' },
     });
   }
@@ -54,7 +114,7 @@ export class DisputesService {
   async findOne(id: string): Promise<Dispute> {
     const dispute = await this.disputeRepository.findOne({
       where: { id },
-      relations: ['claim', 'messages'],
+      relations: ['claim', 'messages', 'timeline'],
     });
     if (!dispute) {
       throw new NotFoundException('Dispute not found');
@@ -81,7 +141,172 @@ export class DisputesService {
       disputeId: dispute.id,
       ...addMessageDto,
     });
+    const savedMessage = await this.messageRepository.save(message);
 
-    return await this.messageRepository.save(message);
+    // Add timeline entry
+    await this.timelineRepository.save(
+      this.timelineRepository.create({
+        disputeId: dispute.id,
+        action: 'MESSAGE_ADDED',
+        performedBy: addMessageDto.author,
+        description: addMessageDto.message,
+      }),
+    );
+
+    return savedMessage;
+  }
+
+  async startInvestigation(id: string, actor: string): Promise<Dispute> {
+    const dispute = await this.findOne(id);
+    const previousState = { status: dispute.status };
+
+    this.assertValidTransition(
+      dispute.status,
+      DisputeStatus.UNDER_REVIEW,
+      'start investigation',
+    );
+    dispute.status = DisputeStatus.UNDER_REVIEW;
+    dispute.assignedTo = actor;
+    dispute.assignedAt = new Date();
+
+    const updatedDispute = await this.disputeRepository.save(dispute);
+
+    await this.timelineRepository.save(
+      this.timelineRepository.create({
+        disputeId: id,
+        action: 'INVESTIGATION_STARTED',
+        performedBy: actor,
+        description: 'Investigation started',
+        previousState,
+        newState: { status: dispute.status },
+      }),
+    );
+
+    return updatedDispute;
+  }
+
+  async resolveDispute(
+    id: string,
+    actor: string,
+    resolution: string,
+  ): Promise<Dispute> {
+    const dispute = await this.findOne(id);
+    const previousState = { status: dispute.status };
+
+    this.assertValidTransition(
+      dispute.status,
+      DisputeStatus.RESOLVED,
+      'resolve dispute',
+    );
+    dispute.status = DisputeStatus.RESOLVED;
+    dispute.resolvedAt = new Date();
+    dispute.resolvedBy = actor;
+    dispute.resolution = resolution;
+
+    const updatedDispute = await this.disputeRepository.save(dispute);
+
+    await this.timelineRepository.save(
+      this.timelineRepository.create({
+        disputeId: id,
+        action: 'DISPUTE_RESOLVED',
+        performedBy: actor,
+        description: `Resolved: ${resolution}`,
+        previousState,
+        newState: { status: dispute.status },
+      }),
+    );
+
+    return updatedDispute;
+  }
+
+  async closeDispute(id: string, actor: string): Promise<Dispute> {
+    const dispute = await this.findOne(id);
+    const previousState = { status: dispute.status };
+
+    this.assertValidTransition(
+      dispute.status,
+      DisputeStatus.CLOSED,
+      'close dispute',
+    );
+    dispute.status = DisputeStatus.CLOSED;
+
+    const updatedDispute = await this.disputeRepository.save(dispute);
+
+    await this.timelineRepository.save(
+      this.timelineRepository.create({
+        disputeId: id,
+        action: 'DISPUTE_CLOSED',
+        performedBy: actor,
+        description: 'Dispute closed',
+        previousState,
+        newState: { status: dispute.status },
+      }),
+    );
+
+    return updatedDispute;
+  }
+
+  async escalateDispute(id: string, actor: string): Promise<Dispute> {
+    const dispute = await this.findOne(id);
+    const previousState = { status: dispute.status };
+
+    this.assertValidTransition(
+      dispute.status,
+      DisputeStatus.ESCALATED,
+      'escalate dispute',
+    );
+    dispute.status = DisputeStatus.ESCALATED;
+    dispute.escalatedTo = actor;
+    dispute.escalatedAt = new Date();
+
+    const updatedDispute = await this.disputeRepository.save(dispute);
+
+    await this.timelineRepository.save(
+      this.timelineRepository.create({
+        disputeId: id,
+        action: 'DISPUTE_ESCALATED',
+        performedBy: actor,
+        description: 'Dispute escalated',
+        previousState,
+        newState: { status: dispute.status },
+      }),
+    );
+
+    return updatedDispute;
+  }
+
+  async reopenDispute(
+    id: string,
+    actor: string,
+    reason: string,
+  ): Promise<Dispute> {
+    const dispute = await this.findOne(id);
+    const previousState = { status: dispute.status };
+
+    this.assertValidTransition(
+      dispute.status,
+      DisputeStatus.OPEN,
+      'reopen dispute',
+    );
+
+    dispute.status = DisputeStatus.OPEN;
+    (dispute as any).resolvedAt = null;
+    (dispute as any).resolvedBy = null;
+    (dispute as any).resolution = null;
+
+    const updatedDispute = await this.disputeRepository.save(dispute);
+
+    await this.timelineRepository.save(
+      this.timelineRepository.create({
+        disputeId: id,
+        action: 'DISPUTE_REOPENED',
+        performedBy: actor,
+        description: `Reopened: ${reason}`,
+        previousState,
+        newState: { status: dispute.status },
+      }),
+    );
+
+    return updatedDispute;
   }
 }

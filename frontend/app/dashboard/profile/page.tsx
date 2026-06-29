@@ -16,6 +16,7 @@ import {
   ShieldCheck,
   Clock,
 } from 'lucide-react';
+import { Button } from '@/app/components/ui/Button';
 
 /* ─── mock data ─────────────────────────────────────── */
 const MOCK_USER = {
@@ -28,7 +29,7 @@ const MOCK_USER = {
   primaryWalletFull: 'GBSFJK39DHVZW2YEJKQVFJ3CMRK8BSFJK39DHVZW2YEJKQVFJ37YKQ',
   linkedWallets: [
     { label: 'Freighter', address: 'GBSF...7YKQ', network: 'Stellar Mainnet' },
-    { label: 'Albedo',    address: 'GABC...3ZZA', network: 'Stellar Mainnet' },
+    { label: 'Albedo', address: 'GABC...3ZZA', network: 'Stellar Mainnet' },
   ],
   referralCode: 'ALEX-DEFI-2025',
   referrals: 14,
@@ -36,19 +37,47 @@ const MOCK_USER = {
 };
 
 const STATS = [
-  { label: 'Total Saved',     value: '$24,593',  delta: '+5.4%',   icon: TrendingUp, color: 'text-emerald-400', bg: 'bg-emerald-400/10' },
-  { label: 'Active Goals',    value: '6',         delta: '2 done',  icon: Target,     color: 'text-purple-400',  bg: 'bg-purple-400/10'  },
-  { label: 'Avg APY Earned',  value: '11.9%',     delta: 'All time',icon: Activity,   color: 'text-cyan-400',    bg: 'bg-cyan-400/10'    },
-  { label: 'Referral Earned', value: '$128',      delta: '14 refs', icon: Gift,       color: 'text-yellow-400',  bg: 'bg-yellow-400/10'  },
+  {
+    label: 'Total Saved',
+    value: '$24,593',
+    delta: '+5.4%',
+    icon: TrendingUp,
+    color: 'text-emerald-400',
+    bg: 'bg-emerald-400/10',
+  },
+  {
+    label: 'Active Goals',
+    value: '6',
+    delta: '2 done',
+    icon: Target,
+    color: 'text-purple-400',
+    bg: 'bg-purple-400/10',
+  },
+  {
+    label: 'Avg APY Earned',
+    value: '11.9%',
+    delta: 'All time',
+    icon: Activity,
+    color: 'text-cyan-400',
+    bg: 'bg-cyan-400/10',
+  },
+  {
+    label: 'Referral Earned',
+    value: '$128',
+    delta: '14 refs',
+    icon: Gift,
+    color: 'text-yellow-400',
+    bg: 'bg-yellow-400/10',
+  },
 ];
 
 const ACTIVITY = [
-  { action: 'Deposited to USDC Pool',  amount: '+$500',    date: '2h ago',      type: 'deposit' },
-  { action: 'Goal "Japan Trip" 🎌 funded',         amount: '+$200',    date: '1 day ago',   type: 'goal'     },
-  { action: 'Yield compounded',         amount: '+$14.22',  date: '2 days ago',  type: 'yield'   },
-  { action: 'Withdrew from XLM Pool',  amount: '-$1,000',  date: '4 days ago',  type: 'withdraw'},
-  { action: 'Referral reward received',amount: '+$9.20',   date: '1 week ago',  type: 'referral'},
-  { action: 'Deposited to USDT Pool',  amount: '+$750',    date: '2 weeks ago', type: 'deposit' },
+  { action: 'Deposited to USDC Pool', amount: '+$500', date: '2h ago', type: 'deposit' },
+  { action: 'Goal "Japan Trip" 🎌 funded', amount: '+$200', date: '1 day ago', type: 'goal' },
+  { action: 'Yield compounded', amount: '+$14.22', date: '2 days ago', type: 'yield' },
+  { action: 'Withdrew from XLM Pool', amount: '-$1,000', date: '4 days ago', type: 'withdraw' },
+  { action: 'Referral reward received', amount: '+$9.20', date: '1 week ago', type: 'referral' },
+  { action: 'Deposited to USDT Pool', amount: '+$750', date: '2 weeks ago', type: 'deposit' },
 ];
 
 /* ─── small helpers ─────────────────────────────────── */
@@ -60,21 +89,23 @@ function CopyButton({ text }: { text: string }) {
     setTimeout(() => setCopied(false), 2000);
   };
   return (
-    <button
+    <Button
+      variant="ghost"
+      size="sm"
       onClick={handleCopy}
-      className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-[#4a8090] hover:text-[#9ef0f0] transition-all cursor-pointer border-0"
+      className="p-1.5 rounded-lg bg-white/5 hover:bg-white/10 text-[#4a8090] hover:text-[#9ef0f0] transition-all"
       aria-label="Copy"
     >
       {copied ? <Check size={13} className="text-emerald-400" /> : <Copy size={13} />}
-    </button>
+    </Button>
   );
 }
 
 function ActivityDot({ type }: { type: string }) {
   const map: Record<string, string> = {
-    deposit:  'bg-emerald-400',
-    goal:     'bg-purple-400',
-    yield:    'bg-cyan-400',
+    deposit: 'bg-emerald-400',
+    goal: 'bg-purple-400',
+    yield: 'bg-cyan-400',
     withdraw: 'bg-rose-400',
     referral: 'bg-yellow-400',
   };
@@ -86,18 +117,44 @@ export default function ProfilePage() {
   const [editingName, setEditingName] = useState(false);
   const [displayName, setDisplayName] = useState(MOCK_USER.displayName);
   const [tempName, setTempName] = useState(MOCK_USER.displayName);
+  const [isSaving, setIsSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Optimistic update for display name
+  const handleNameSave = async () => {
+    const previousName = displayName;
+
+    // Optimistically update
+    setDisplayName(tempName);
+    setIsSaving(true);
+    setError(null);
+
+    try {
+      // Simulate API call - replace with actual API call
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // await api.updateProfile({ displayName: tempName });
+
+      setEditingName(false);
+      setIsSaving(false);
+    } catch (err) {
+      // Rollback on error
+      setDisplayName(previousName);
+      setError('Failed to update display name');
+      setIsSaving(false);
+    }
+  };
 
   const cardBase =
     'rounded-2xl border border-white/[0.08] bg-[linear-gradient(180deg,rgba(4,20,22,0.85),rgba(6,18,20,0.75))] p-6 backdrop-blur-sm shadow-[0_10px_30px_rgba(2,12,14,0.6)]';
 
   return (
     <div className="w-full max-w-full overflow-x-hidden space-y-5">
-
       {/* ── Top: Avatar card + Stats ─────────────────── */}
       <div className="flex flex-col lg:flex-row gap-5">
-
         {/* Avatar / identity card */}
-        <div className={`${cardBase} flex flex-col sm:flex-row gap-6 items-start sm:items-center lg:w-[360px] lg:shrink-0`}>
+        <div
+          className={`${cardBase} flex flex-col sm:flex-row gap-6 items-start sm:items-center lg:w-[360px] lg:shrink-0`}
+        >
           {/* Avatar */}
           <div className="relative shrink-0">
             <div className="w-20 h-20 rounded-2xl bg-gradient-to-br from-cyan-500/30 to-teal-600/20 border border-cyan-500/20 flex items-center justify-center text-2xl font-extrabold text-cyan-300">
@@ -115,23 +172,38 @@ export default function ProfilePage() {
                   autoFocus
                   value={tempName}
                   onChange={(e) => setTempName(e.target.value)}
-                  onBlur={() => { setDisplayName(tempName); setEditingName(false); }}
-                  onKeyDown={(e) => { if (e.key === 'Enter') { setDisplayName(tempName); setEditingName(false); } }}
+                  onBlur={handleNameSave}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleNameSave();
+                    }
+                  }}
                   className="text-lg font-bold text-white bg-transparent border-b border-cyan-500 outline-none w-full"
                 />
               ) : (
                 <>
                   <h1 className="text-lg font-bold text-white truncate">{displayName}</h1>
-                  <button
-                    onClick={() => { setTempName(displayName); setEditingName(true); }}
-                    className="text-[#4a8090] hover:text-cyan-400 bg-transparent border-0 cursor-pointer p-0.5 transition-colors"
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setTempName(displayName);
+                      setEditingName(true);
+                      setError(null);
+                    }}
+                    className="text-[#4a8090] hover:text-cyan-400 bg-transparent p-0.5"
                     aria-label="Edit name"
                   >
                     <Edit3 size={14} />
-                  </button>
+                  </Button>
                 </>
               )}
             </div>
+            {error && (
+              <p role="alert" className="text-xs text-red-500 mb-2">
+                {error}
+              </p>
+            )}
 
             <div className="text-xs text-[#6e9aaa] mb-3">{MOCK_USER.username}</div>
 
@@ -161,7 +233,9 @@ export default function ProfilePage() {
                 <div className="text-2xl font-extrabold text-white">{s.value}</div>
                 <div className="text-xs text-[#6e9aaa] mt-0.5">{s.label}</div>
               </div>
-              <div className="text-[0.65rem] text-[#4a8090] font-medium uppercase tracking-wider">{s.delta}</div>
+              <div className="text-[0.65rem] text-[#4a8090] font-medium uppercase tracking-wider">
+                {s.delta}
+              </div>
             </div>
           ))}
         </div>
@@ -169,7 +243,6 @@ export default function ProfilePage() {
 
       {/* ── Middle: Wallets + Activity ───────────────── */}
       <div className="flex flex-col lg:flex-row gap-5">
-
         {/* Wallet addresses */}
         <div className={`${cardBase} lg:w-[360px] lg:shrink-0 flex flex-col gap-5`}>
           <div className="flex items-center gap-2">
@@ -189,7 +262,9 @@ export default function ProfilePage() {
                   </div>
                   <div className="min-w-0">
                     <div className="text-xs font-bold text-white">{w.label}</div>
-                    <div className="text-[0.65rem] text-[#4a8090] font-mono truncate">{w.address}</div>
+                    <div className="text-[0.65rem] text-[#4a8090] font-mono truncate">
+                      {w.address}
+                    </div>
                     <div className="text-[0.6rem] text-[#324f5a]">{w.network}</div>
                   </div>
                 </div>
@@ -208,9 +283,13 @@ export default function ProfilePage() {
             ))}
           </div>
 
-          <button className="w-full py-2.5 rounded-xl border border-dashed border-white/[0.12] text-[#4a8090] hover:border-cyan-500/30 hover:text-cyan-400 text-xs font-semibold transition-all bg-transparent cursor-pointer">
+          <Button
+            variant="outline"
+            size="md"
+            className="w-full py-2.5 rounded-xl border-dashed border-white/[0.12] text-[#4a8090] hover:border-cyan-500/30 hover:text-cyan-400 text-xs font-semibold transition-all"
+          >
             + Connect Another Wallet
-          </button>
+          </Button>
         </div>
 
         {/* Activity history */}
@@ -220,7 +299,9 @@ export default function ProfilePage() {
               <Activity className="text-cyan-400" size={18} />
               <h2 className="text-sm font-bold text-white">Activity History</h2>
             </div>
-            <span className="text-[0.65rem] text-[#4a8090] uppercase tracking-wider">Last 30 days</span>
+            <span className="text-[0.65rem] text-[#4a8090] uppercase tracking-wider">
+              Last 30 days
+            </span>
           </div>
 
           <div className="flex flex-col">
@@ -252,7 +333,9 @@ export default function ProfilePage() {
         {/* glow */}
         <div
           className="pointer-events-none absolute -top-12 -right-12 w-64 h-64 rounded-full"
-          style={{ background: 'radial-gradient(ellipse, rgba(0,212,192,0.07) 0%, transparent 70%)' }}
+          style={{
+            background: 'radial-gradient(ellipse, rgba(0,212,192,0.07) 0%, transparent 70%)',
+          }}
         />
 
         <div className="relative z-10 flex flex-col md:flex-row items-start md:items-center gap-8">
@@ -262,7 +345,9 @@ export default function ProfilePage() {
             </div>
             <div>
               <h2 className="text-base font-bold text-white mb-0.5">Your Referral Programme</h2>
-              <p className="text-xs text-[#6e9aaa]">Earn 1% of every deposit made by your referrals — forever.</p>
+              <p className="text-xs text-[#6e9aaa]">
+                Earn 1% of every deposit made by your referrals — forever.
+              </p>
             </div>
           </div>
 
@@ -271,11 +356,15 @@ export default function ProfilePage() {
             <div className="flex gap-6">
               <div className="text-center">
                 <div className="text-2xl font-extrabold text-white">{MOCK_USER.referrals}</div>
-                <div className="text-[0.65rem] text-[#4a8090] uppercase tracking-wider">Referrals</div>
+                <div className="text-[0.65rem] text-[#4a8090] uppercase tracking-wider">
+                  Referrals
+                </div>
               </div>
               <div className="w-px h-10 bg-white/[0.07]" />
               <div className="text-center">
-                <div className="text-2xl font-extrabold text-emerald-400">{MOCK_USER.referralRewards}</div>
+                <div className="text-2xl font-extrabold text-emerald-400">
+                  {MOCK_USER.referralRewards}
+                </div>
                 <div className="text-[0.65rem] text-[#4a8090] uppercase tracking-wider">Earned</div>
               </div>
             </div>
@@ -290,7 +379,6 @@ export default function ProfilePage() {
           </div>
         </div>
       </div>
-
     </div>
   );
 }

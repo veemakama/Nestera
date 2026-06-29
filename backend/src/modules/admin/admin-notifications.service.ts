@@ -11,7 +11,10 @@ import {
   UserSubscription,
   SubscriptionStatus,
 } from '../savings/entities/user-subscription.entity';
+import { InjectQueue } from '@nestjs/bull';
+import { Queue } from 'bullmq';
 import { MailService } from '../mail/mail.service';
+import { ShutdownTrackedTask } from '../../common/decorators/shutdown-task.decorator';
 import {
   BroadcastNotificationDto,
   ScheduleNotificationDto,
@@ -35,11 +38,13 @@ export class AdminNotificationsService {
     private readonly userRepository: Repository<User>,
     @InjectRepository(UserSubscription)
     private readonly subscriptionRepository: Repository<UserSubscription>,
+    @InjectQueue('notifications')
+    private readonly notificationQueue: Queue,
     private readonly mailService: MailService,
   ) {}
 
   /**
-   * Send broadcast notification to all users or targeted users
+   * Send broadcast notification to all users or targeted users via job queue
    */
   async broadcastNotification(
     dto: BroadcastNotificationDto,
@@ -327,6 +332,7 @@ export class AdminNotificationsService {
    * Scheduled job to process scheduled notifications
    * Runs every minute to check for pending scheduled notifications
    */
+  @ShutdownTrackedTask()
   @Cron(CronExpression.EVERY_MINUTE)
   async processScheduledNotifications(): Promise<void> {
     const now = new Date();

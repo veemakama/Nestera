@@ -6,7 +6,6 @@ import {
   Param,
   Body,
   UseGuards,
-  Request,
   Post,
   UseInterceptors,
   UploadedFile,
@@ -18,7 +17,10 @@ import {
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
   ApiOperation,
+  ApiParam,
   ApiResponse,
   ApiTags,
 } from '@nestjs/swagger';
@@ -30,12 +32,8 @@ import { NetWorthDto } from './dto/net-worth.dto';
 import { UserProfileResponseDto } from './dto/user-profile-response.dto';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
-import { ThrottlerGuard } from '@nestjs/throttler';
-import { FileValidator } from '@nestjs/common';
 
-// File upload configuration
-const MAX_AVATAR_SIZE = 5 * 1024 * 1024; // 5MB
-const MAX_KYC_DOC_SIZE = 10 * 1024 * 1024; // 10MB
+import { FileValidator } from '@nestjs/common';
 
 class ImageTypeValidator extends FileValidator {
   constructor() {
@@ -116,11 +114,24 @@ export class UserController {
 
   @Get('me')
   @ApiOperation({ summary: 'Get basic info for the authenticated user' })
+  @ApiResponse({ status: 200, description: 'User info returned' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   getMe(@CurrentUser() user: { id: string }) {
     return this.userService.findById(user.id);
   }
 
   @Get('me/net-worth')
+  @ApiOperation({
+    summary: 'Get net worth breakdown for the authenticated user',
+    description:
+      'Returns wallet balance, savings breakdown (flexible/locked), and percentage allocations.',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Net worth breakdown',
+    type: NetWorthDto,
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getNetWorth(@CurrentUser() user: { id: string }): Promise<NetWorthDto> {
     const userEntity = await this.userService.findById(user.id);
 
@@ -166,32 +177,56 @@ export class UserController {
   }
 
   @Get(':id')
+  @ApiOperation({ summary: 'Get a user by ID (admin / internal use)' })
+  @ApiParam({ name: 'id', description: 'User UUID' })
+  @ApiResponse({ status: 200, description: 'User record' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'User not found' })
   findOne(@Param('id') id: string) {
     return this.userService.findById(id);
   }
 
   @Patch('me')
+  @ApiOperation({ summary: 'Update the authenticated user profile' })
+  @ApiBody({ type: UpdateUserDto })
+  @ApiResponse({ status: 200, description: 'Profile updated' })
+  @ApiResponse({ status: 400, description: 'Validation error' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   updateMe(@CurrentUser() user: { id: string }, @Body() dto: UpdateUserDto) {
     return this.userService.update(user.id, dto);
   }
 
   @Delete('me')
+  @ApiOperation({ summary: 'Delete the authenticated user account' })
+  @ApiResponse({ status: 200, description: 'Account deleted' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   deleteMe(@CurrentUser() user: { id: string }) {
     return this.userService.remove(user.id);
   }
 
   @Post('avatar')
-  @UseGuards(ThrottlerGuard)
+  @ApiOperation({
+    summary: 'Upload a profile avatar image',
+    description: 'Accepts JPEG, PNG, or WebP up to 5 MB.',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      properties: { file: { type: 'string', format: 'binary' } },
+    },
+  })
+  @ApiResponse({ status: 201, description: 'Avatar uploaded, URL returned' })
+  @ApiResponse({ status: 400, description: 'Invalid file type or size' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   @UseInterceptors(FileInterceptor('file'))
   async uploadAvatar(
     @CurrentUser() user: { id: string },
     @UploadedFile(
       new ParseFilePipe({
         validators: [
-          new MaxFileSizeValidator({ maxSize: MAX_AVATAR_SIZE }),
+          new MaxFileSizeValidator({ maxSize: 1024 * 1024 * 5 }), // 5MB
           new ImageTypeValidator(),
         ],
-        fileIsRequired: true,
       }),
     )
     file: any,
@@ -201,17 +236,29 @@ export class UserController {
   }
 
   @Post('me/kyc-docs')
-  @UseGuards(ThrottlerGuard)
+  @ApiOperation({
+    summary: 'Upload a KYC document',
+    description:
+      'Accepts PDF or JPEG up to 10 MB. Triggers KYC review process.',
+  })
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      properties: { document: { type: 'string', format: 'binary' } },
+    },
+  })
+  @ApiResponse({ status: 201, description: 'KYC document uploaded' })
+  @ApiResponse({ status: 400, description: 'Invalid file type or size' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
   @UseInterceptors(FileInterceptor('document'))
   async uploadKycDocument(
     @CurrentUser() user: { id: string },
     @UploadedFile(
       new ParseFilePipe({
         validators: [
-          new MaxFileSizeValidator({ maxSize: MAX_KYC_DOC_SIZE }),
+          new MaxFileSizeValidator({ maxSize: 1024 * 1024 * 10 }), // 10MB
           new KycDocumentValidator(),
         ],
-        fileIsRequired: true,
       }),
     )
     file: any,

@@ -4,9 +4,11 @@ import { getRepositoryToken } from '@nestjs/typeorm';
 import {
   Dispute,
   DisputeMessage,
+  DisputeTimeline,
   DisputeStatus,
 } from './entities/dispute.entity';
 import { MedicalClaim } from '../claims/entities/medical-claim.entity';
+import { NotificationsService } from '../notifications/notifications.service';
 import { BadRequestException } from '@nestjs/common';
 
 describe('DisputesService', () => {
@@ -28,6 +30,15 @@ describe('DisputesService', () => {
     findOneBy: jest.fn(),
   };
 
+  const mockTimelineRepository = {
+    create: jest.fn((data) => data),
+    save: jest.fn((data) => Promise.resolve(data)),
+  };
+
+  const mockNotificationsService = {
+    createNotification: jest.fn(),
+  };
+
   beforeEach(async () => {
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -43,6 +54,14 @@ describe('DisputesService', () => {
         {
           provide: getRepositoryToken(MedicalClaim),
           useValue: mockClaimRepository,
+        },
+        {
+          provide: getRepositoryToken(DisputeTimeline),
+          useValue: mockTimelineRepository,
+        },
+        {
+          provide: NotificationsService,
+          useValue: mockNotificationsService,
         },
       ],
     }).compile();

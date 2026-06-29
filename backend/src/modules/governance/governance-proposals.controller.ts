@@ -10,6 +10,7 @@ import {
   Query,
   UseGuards,
 } from '@nestjs/common';
+import { Throttle } from '@nestjs/throttler';
 import {
   ApiBearerAuth,
   ApiOperation,
@@ -19,19 +20,18 @@ import {
   ApiTags,
 } from '@nestjs/swagger';
 import { JwtAuthGuard } from '../../auth/guards/jwt-auth.guard';
-import { RolesGuard } from '../../common/guards/roles.guard';
-import { Roles } from '../../common/decorators/roles.decorator';
 import { CurrentUser } from '../../common/decorators/current-user.decorator';
 import { CreateProposalDto } from './dto/create-proposal.dto';
 import { EditProposalDto } from './dto/edit-proposal.dto';
 import { CastVoteDto } from './dto/cast-vote.dto';
-import { AdminCancelProposalDto } from './dto/admin-cancel-proposal.dto';
 import { ProposalListItemDto } from './dto/proposal-list-item.dto';
 import { ProposalResponseDto } from './dto/proposal-response.dto';
+import { ProposalTemplateDetailDto } from './dto/proposal-template-detail.dto';
+import { ProposalTemplateSummaryDto } from './dto/proposal-template-summary.dto';
 import { ProposalVotesResponseDto } from './dto/proposal-votes-response.dto';
 import { ProposalStatus } from './entities/governance-proposal.entity';
-import { Role } from '../../common/enums/role.enum';
 import { GovernanceService } from './governance.service';
+import { Idempotent } from '../../common/decorators/idempotent.decorator';
 
 @ApiTags('governance')
 @Controller('governance/proposals')
@@ -125,8 +125,33 @@ export class GovernanceProposalsController {
     return this.governanceService.getProposals(status);
   }
 
+  @Get('templates')
+  @ApiOperation({ summary: 'List governance proposal templates' })
+  @ApiResponse({ status: 200, type: [ProposalTemplateSummaryDto] })
+  getProposalTemplates(): ProposalTemplateSummaryDto[] {
+    return this.governanceService.getProposalTemplates();
+  }
+
+  @Get('templates/:templateId')
+  @ApiOperation({ summary: 'Get details for a governance proposal template' })
+  @ApiQuery({
+    name: 'version',
+    required: false,
+    description:
+      'Template version to use. Defaults to the latest available version.',
+  })
+  @ApiResponse({ status: 200, type: ProposalTemplateDetailDto })
+  getProposalTemplate(
+    @Param('templateId') templateId: string,
+    @Query('version') version?: string,
+  ): ProposalTemplateDetailDto {
+    return this.governanceService.getProposalTemplateById(templateId, version);
+  }
+
   @Post(':id/vote')
   @UseGuards(JwtAuthGuard)
+  @Idempotent({ ttlSeconds: 3600 })
+  @Throttle({ vote: { limit: 10, ttl: 60_000 } })
   @ApiBearerAuth()
   @ApiOperation({
     summary: 'Cast a vote on an active proposal',
@@ -227,6 +252,7 @@ export class GovernanceProposalsController {
 
   @Post(':id/execute')
   @UseGuards(JwtAuthGuard)
+  @Idempotent({ ttlSeconds: 86400 })
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Execute a queued proposal after timelock' })
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
@@ -262,34 +288,68 @@ export class GovernanceProposalsController {
   cancelProposal(
     @Param('id') id: string,
     @CurrentUser() user: { id: string },
+    @Body('reason') reason?: string,
   ): Promise<ProposalResponseDto> {
-    return this.governanceService.cancelProposal(id, user.id);
+    return this.governanceService.cancelProposal(id, user.id, reason);
   }
 
-  // ── Admin endpoints ───────────────────────────────────────────────────────
-
-  @Post(':id/admin-cancel')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.ADMIN)
+  @Post(':id/finalize')
+  @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
   @ApiOperation({
-    summary: 'Emergency cancellation by admin',
+    summary: 'Finalize voting on a proposal (ACTIVE → PASSED / FAILED)',
     description:
-      'Allows an admin to cancel a malicious or erroneous proposal. Requires a valid reason.',
+      'Evaluates weighted quorum and FOR/AGAINST majority once the voting window ' +
+      'has closed on-chain and transitions the proposal to PASSED or FAILED. ' +
+      'The scheduler does this automatically every 30 s; call this endpoint to ' +
+      'trigger finalization immediately after the end block is reached.',
   })
   @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
   @ApiResponse({
     status: 201,
-    description: 'Proposal cancelled by admin',
+    description: 'Proposal finalized',
     type: ProposalResponseDto,
   })
-  @ApiResponse({ status: 403, description: 'Not an admin' })
-  @ApiResponse({ status: 401, description: 'Unauthorized' })
-  adminCancelProposal(
+  @ApiResponse({
+    status: 400,
+    description: 'Voting window not yet closed or proposal not ACTIVE',
+  })
+  finalizeProposal(
     @Param('id') id: string,
-    @Body() dto: AdminCancelProposalDto,
     @CurrentUser() user: { id: string },
   ): Promise<ProposalResponseDto> {
-    return this.governanceService.adminCancelProposal(id, user.id, dto.reason);
+    return this.governanceService.finalizeVoting(id, user.id);
+  }
+
+  @Get(':id/transitions')
+  @ApiOperation({
+    summary: 'Get the full lifecycle transition history for a proposal',
+    description:
+      'Returns an immutable, time-ordered audit trail of every state change ' +
+      'that occurred on the proposal, including who triggered each transition, ' +
+      'the reason, and structured metadata (vote tallies, quorum figures, etc.).',
+  })
+  @ApiParam({ name: 'id', type: 'string', format: 'uuid' })
+  @ApiResponse({
+    status: 200,
+    description: 'Ordered list of state transitions',
+    schema: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id:            { type: 'string', format: 'uuid' },
+          fromStatus:    { type: 'string' },
+          toStatus:      { type: 'string' },
+          triggeredBy:   { type: 'string', nullable: true },
+          reason:        { type: 'string', nullable: true },
+          metadata:      { type: 'object', nullable: true },
+          transitionedAt: { type: 'string', format: 'date-time' },
+        },
+      },
+    },
+  })
+  getTransitionHistory(@Param('id') id: string) {
+    return this.governanceService.getTransitionHistory(id);
   }
 }

@@ -1,24 +1,17 @@
-# Nestera Contract Fixes TODO
+# TODO
 
-## Completed
-- [x] Fix compile error: `effective_last_update` → `last_update` in `contracts/src/staking/storage.rs`
-- [x] Remove unused import in `contracts/src/governance.rs`
+## Data Export Security Controls
+- [ ] Inspect `DataExportRequest` entity + related DTOs for fields needed (userId, token, expiresAt, filePath)
+- [ ] Update `data-export.controller.ts` download endpoint to include `@CurrentUser()` and verify token belongs to caller
+- [x] Update `data-export.service.ts` `getExportFile()` to accept `userId` and validate ownership
+- [x] Validate resolved `filePath` is within `EXPORT_DIR` before sending
+- [ ] Add rate limiting/throttling for `GET /users/data/export/download/:token`
+- [ ] Add/adjust tests for unauthorized access + expired link + path validation
 
-## Pending
-1. Migrate 57 deprecated `env.events().publish` calls to `#[contractevent]` macro across:
-   - contracts/src/config.rs (5 locations)
-   - contracts/src/flexi.rs (2)
-   - contracts/src/goal.rs (5)
-   - contracts/src/governance_events.rs (5)
-   - contracts/src/group.rs (5)
-   - contracts/src/lock.rs (1)
-   - contracts/src/lib.rs (9)
-   - contracts/src/rewards/events.rs (5)
-   - contracts/src/staking/events.rs (3)
-   - contracts/src/strategy/registry.rs (2)
-   - contracts/src/strategy/routing.rs (5)
-   - contracts/src/token.rs (3)
-   - contracts/src/treasury/mod.rs (10)
-2. Run `cargo test` after fixes
-3. Update contract tests if events change
-4. Verify invariants and storage TTLs
+## Improve Cache Warming for High-Traffic Endpoints
+- [x] Implement controlled concurrency in `cache-warming.service.ts`
+- [x] Add per-endpoint timeout when calling `cacheStrategy.warmCache`
+- [x] Add anti-duplicate lock to prevent overlapping warming runs
+- [x] Ensure metrics remain accurate under parallel execution
+- [ ] Run backend tests / lint
+

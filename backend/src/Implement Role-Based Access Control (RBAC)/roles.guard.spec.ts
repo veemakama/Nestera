@@ -28,7 +28,7 @@ describe('RolesGuard', () => {
   });
 
   const mockReflector = (roles: Role[] | undefined) => {
-    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(roles);
+    jest.spyOn(reflector, 'getAllAndOverride').mockReturnValue(roles as any);
   };
 
   it('allows access when no @Roles decorator is present', () => {

@@ -15,6 +15,7 @@ import { ProductApySnapshot } from './entities/product-apy-snapshot.entity';
 import { WaitlistService } from './waitlist.service';
 import { WithdrawalRequest } from './entities/withdrawal-request.entity';
 import { Transaction } from '../transactions/entities/transaction.entity';
+import { TransactionStateMachineService } from '../../transactions/services/transaction-state-machine.service';
 
 describe('SavingsService', () => {
   let service: SavingsService;
@@ -30,7 +31,7 @@ describe('SavingsService', () => {
     getUserSavingsBalance: jest.Mock;
     getUserVaultBalance: jest.Mock;
   };
-  let cacheManager: { del: jest.Mock; get: jest.Mock; set: jest.Mock };
+  let cacheManager: { del: jest.Mock };
 
   beforeEach(async () => {
     productRepository = {
@@ -60,13 +61,12 @@ describe('SavingsService', () => {
 
     cacheManager = {
       del: jest.fn(),
-      get: jest.fn().mockResolvedValue(undefined),
-      set: jest.fn().mockResolvedValue(undefined),
     };
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         SavingsService,
+        { provide: TransactionStateMachineService, useValue: { transition: jest.fn(), getState: jest.fn() } },
         {
           provide: getRepositoryToken(SavingsProduct),
           useValue: productRepository,

@@ -1,50 +1,49 @@
-import "./globals.css";
+import './globals.css';
+import type { Metadata } from 'next';
+import { headers } from 'next/headers';
+import IntlProvider from './i18n/provider';
+import en from './locales/en.json';
+import es from './locales/es.json';
 
-import type { Metadata } from "next";
-import { ThemeProvider } from "./context/ThemeContext";
-import { WalletProvider } from "./context/WalletContext";
-import { ToastProvider } from "./context/ToastContext";
+const messages = { en, es };
+const defaultLocale = 'en';
+const rtlLocales = ['ar', 'he', 'fa', 'ur'];
 
-const BASE_URL = "https://nestera.app";
-
-const themeBootScript = `(function(){try{var key='nestera-theme';var root=document.documentElement;var stored=window.localStorage.getItem(key);var theme=stored==='light'||stored==='dark'||stored==='system'?stored:'system';var resolved=theme==='system'&&window.matchMedia('(prefers-color-scheme: dark)').matches?'dark':theme==='system'?'light':theme;root.dataset.themePreference=theme;root.dataset.theme=resolved;root.classList.remove('light','dark');root.classList.add(resolved);root.style.colorScheme=resolved;}catch(error){document.documentElement.dataset.themePreference='system';}})();`;
-
-export const metadata: Metadata = {
-  title: "Nestera - Decentralized Savings on Stellar",
-  description: "Secure, transparent savings powered by Stellar & Soroban",
-  metadataBase: new URL(BASE_URL),
-  alternates: {
-    canonical: "/",
-  },
-  twitter: {
-    card: "summary_large_image",
-    title: "Nestera - Decentralized Savings on Stellar",
-    description: "Secure, transparent savings powered by Stellar & Soroban",
-    images: ["/og-image.png"],
-  },
+const getLocale = async () => {
+  const locale = (await headers()).get('x-nestera-locale') ?? defaultLocale;
+  return locale in messages ? (locale as keyof typeof messages) : defaultLocale;
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export async function generateMetadata(): Promise<Metadata> {
+  const locale = await getLocale();
+  const metadata = messages[locale].metadata;
+
+  return {
+    title: metadata.title,
+    description: metadata.description,
+    openGraph: {
+      title: metadata.title,
+      description: metadata.description,
+      type: 'website',
+    },
+  };
+}
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const locale = await getLocale();
+
   return (
-    <html lang="en" suppressHydrationWarning>
+    <html lang={locale} dir={rtlLocales.includes(locale) ? 'rtl' : 'ltr'}>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: themeBootScript }} />
+        <meta charSet="utf-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="format-detection" content="telephone=no" />
+        <meta name="theme-color" content="#00d4c0" />
       </head>
-      <body className="bg-[var(--color-background)] text-[var(--color-text)] antialiased">
-        <a href="#main-content" className="skip-link">
-          Skip to content
-        </a>
-        <ThemeProvider>
-          <WalletProvider>
-            <ToastProvider>
-              <main id="main-content">{children}</main>
-            </ToastProvider>
-          </WalletProvider>
-        </ThemeProvider>
+      <body className="bg-slate-950 text-white">
+        <IntlProvider locale={locale} messages={messages[locale]}>
+          {children}
+        </IntlProvider>
       </body>
     </html>
   );

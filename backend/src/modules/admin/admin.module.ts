@@ -5,7 +5,6 @@ import { UserModule } from '../user/user.module';
 import { SavingsModule } from '../savings/savings.module';
 import { MailModule } from '../mail/mail.module';
 import { BlockchainModule } from '../blockchain/blockchain.module';
-import { GovernanceModule } from '../governance/governance.module';
 import { CircuitBreakerModule } from '../../common/circuit-breaker/circuit-breaker.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { AdminController } from './admin.controller';
@@ -26,7 +25,6 @@ import { AdminUsersService } from './admin-users.service';
 import { AdminSavingsService } from './admin-savings.service';
 import { AdminDisputesService } from './admin-disputes.service';
 import { AdminAuditLogsService } from './admin-audit-logs.service';
-import { AdminAuditLogsArchivalService } from './admin-audit-logs-archival.service';
 import { AdminNotificationsService } from './admin-notifications.service';
 import { AdminTransactionsService } from './admin-transactions.service';
 import { AdminTransactionNote } from './entities/admin-transaction-note.entity';
@@ -38,7 +36,6 @@ import { WithdrawalRequest } from '../savings/entities/withdrawal-request.entity
 import { AuditLog } from '../../common/entities/audit-log.entity';
 import { Transaction } from '../transactions/entities/transaction.entity';
 import { Dispute, DisputeTimeline } from '../disputes/entities/dispute.entity';
-import { Notification } from '../notifications/entities/notification.entity';
 
 @Module({
   imports: [
@@ -60,7 +57,6 @@ import { Notification } from '../notifications/entities/notification.entity';
     SavingsModule,
     MailModule,
     BlockchainModule,
-    GovernanceModule,
     CircuitBreakerModule,
     NotificationsModule,
     EventEmitterModule,
@@ -77,15 +73,10 @@ import { Notification } from '../notifications/entities/notification.entity';
     AdminSavingsService,
     AdminDisputesService,
     AdminAuditLogsService,
-    AdminAuditLogsArchivalService,
     AdminNotificationsService,
     AdminTransactionsService,
     AdminWithdrawalService,
   ],
-  exports: [
-    AdminDisputesService,
-    AdminAuditLogsService,
-    AdminAuditLogsArchivalService,
-  ],
+  exports: [AdminDisputesService, AdminAuditLogsService],
 })
 export class AdminModule {}

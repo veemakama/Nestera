@@ -1,25 +1,33 @@
-import { IsEmail, IsString, IsOptional } from 'class-validator';
+import {
+  IsEmail,
+  IsString,
+  MinLength,
+  MaxLength,
+  IsOptional,
+  Matches,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { IsStellarPublicKey } from '../../common/validators/is-stellar-key.validator';
 import { IsStrongPassword } from '../../common/validators/is-strong-password.validator';
+import { Trim } from '../../common/validators/sanitize.transform';
 
 export class RegisterDto {
   @ApiProperty({ example: 'alice@example.com' })
+  @Trim()
   @IsEmail()
   email: string;
 
-  @ApiProperty({
-    example: 'MyP@ssw0rd!',
-    description:
-      'Must be 8-72 characters and contain at least one uppercase letter, ' +
-      'one lowercase letter, one digit, and one special character.',
-  })
+  @ApiProperty({ example: 'supersecret123' })
   @IsString()
+  @MinLength(8)
+  @MaxLength(72, { message: 'password must not exceed 72 characters' })
   @IsStrongPassword()
   password: string;
 
   @ApiProperty({ example: 'Alice', required: false })
   @IsString()
+  @Trim()
+  @MaxLength(255)
   name?: string;
 
   @ApiPropertyOptional({
@@ -28,20 +36,11 @@ export class RegisterDto {
   })
   @IsOptional()
   @IsString()
-  referralCode?: string;
-
-  @ApiPropertyOptional({
-    example: 'device-123',
-    description: 'Device identifier',
+  @Trim()
+  @Matches(/^[A-Z0-9]{4,12}$/, {
+    message: 'referralCode must be 4-12 uppercase alphanumeric characters',
   })
-  @IsOptional()
-  @IsString()
-  deviceId?: string;
-
-  @ApiPropertyOptional({ example: 'My Phone', description: 'Device name' })
-  @IsOptional()
-  @IsString()
-  deviceName?: string;
+  referralCode?: string;
 }
 
 export class LoginDto {
@@ -52,19 +51,6 @@ export class LoginDto {
   @ApiProperty({ example: 'supersecret123' })
   @IsString()
   password: string;
-
-  @ApiPropertyOptional({
-    example: 'device-123',
-    description: 'Device identifier',
-  })
-  @IsOptional()
-  @IsString()
-  deviceId?: string;
-
-  @ApiPropertyOptional({ example: 'My Phone', description: 'Device name' })
-  @IsOptional()
-  @IsString()
-  deviceName?: string;
 }
 
 export class GetNonceDto {
@@ -85,20 +71,6 @@ export class VerifySignatureDto {
   @ApiProperty({ description: 'The nonce returned by GET /auth/nonce' })
   @IsString()
   nonce: string;
-}
-
-export class RefreshTokenDto {
-  @ApiProperty({ description: 'Refresh token' })
-  @IsString()
-  token: string;
-
-  @ApiPropertyOptional({
-    example: 'device-123',
-    description: 'Device identifier',
-  })
-  @IsOptional()
-  @IsString()
-  deviceId?: string;
 }
 
 /**
