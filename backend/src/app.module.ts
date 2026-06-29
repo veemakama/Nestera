@@ -383,6 +383,10 @@ const envValidationSchema = Joi.object({
     },
     {
       provide: APP_INTERCEPTOR,
+      useClass: MetricsInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
       useClass: GracefulShutdownInterceptor,
     },
     {
