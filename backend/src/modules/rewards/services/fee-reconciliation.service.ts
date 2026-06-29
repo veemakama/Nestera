@@ -101,7 +101,7 @@ export class FeeReconciliationService {
     record.status = ReconciliationStatus.RECONCILED;
     record.reconciledAt = new Date();
     record.reconciledBy = resolvedBy;
-    record.notes = notes ?? null;
+    record.notes = notes ?? null as any;
 
     return this.reconciliationRepo.save(record);
   }
