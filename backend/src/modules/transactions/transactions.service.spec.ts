@@ -244,4 +244,87 @@ describe('TransactionsService', () => {
       );
     });
   });
+
+  describe('createSavedSearch', () => {
+    it('should create a saved search for a user', async () => {
+      const userId = 'test-user-id';
+      const dto = { name: 'My Search', filters: { type: ['DEPOSIT'] }, isDefault: false };
+      const savedSearch = { id: '1', userId, ...dto, createdAt: new Date() };
+
+      mockSavedSearchRepository.create.mockReturnValue(savedSearch);
+      mockSavedSearchRepository.save.mockResolvedValue(savedSearch);
+      mockSavedSearchRepository.find.mockResolvedValue([]);
+
+      const result = await service.createSavedSearch(userId, dto as any);
+
+      expect(mockSavedSearchRepository.create).toHaveBeenCalled();
+      expect(mockSavedSearchRepository.save).toHaveBeenCalled();
+      expect(result).toBeDefined();
+    });
+  });
+
+  describe('listSavedSearches', () => {
+    it('should return saved searches for a user', async () => {
+      const userId = 'test-user-id';
+      const searches = [
+        { id: '1', userId, name: 'Search 1', filters: {}, isDefault: false, createdAt: new Date() },
+      ];
+
+      mockSavedSearchRepository.find.mockResolvedValue(searches);
+
+      const result = await service.listSavedSearches(userId);
+
+      expect(mockSavedSearchRepository.find).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { userId } }),
+      );
+      expect(result).toHaveLength(1);
+    });
+
+    it('should return empty array when no saved searches exist', async () => {
+      mockSavedSearchRepository.find.mockResolvedValue([]);
+      const result = await service.listSavedSearches('user-id');
+      expect(result).toHaveLength(0);
+    });
+  });
+
+  describe('updateSavedSearch', () => {
+    it('should update a saved search belonging to the user', async () => {
+      const userId = 'test-user-id';
+      const id = 'search-1';
+      const dto = { name: 'Updated Search' };
+      const existing = { id, userId, name: 'Old Search', filters: {}, isDefault: false };
+      const updated = { ...existing, ...dto };
+
+      mockSavedSearchRepository.findOne.mockResolvedValue(existing);
+      mockSavedSearchRepository.save.mockResolvedValue(updated);
+
+      const result = await service.updateSavedSearch(userId, id, dto as any);
+
+      expect(mockSavedSearchRepository.findOne).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id, userId } }),
+      );
+      expect(result).toBeDefined();
+    });
+
+    it('should return error when saved search not found', async () => {
+      mockSavedSearchRepository.findOne.mockResolvedValue(null);
+      const result = await service.updateSavedSearch('user-id', 'bad-id', {} as any);
+      expect(result).toEqual(expect.objectContaining({ ok: false }));
+    });
+  });
+
+  describe('deleteSavedSearch', () => {
+    it('should delete a saved search belonging to the user', async () => {
+      const userId = 'test-user-id';
+      const id = 'search-1';
+      const existing = { id, userId, name: 'Search', filters: {}, isDefault: false };
+
+      mockSavedSearchRepository.findOne.mockResolvedValue(existing);
+      mockSavedSearchRepository.delete.mockResolvedValue({ affected: 1 });
+
+      await service.deleteSavedSearch(userId, id);
+
+      expect(mockSavedSearchRepository.delete).toHaveBeenCalledWith({ id, userId });
+    });
+  });
 });
