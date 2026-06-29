@@ -15,6 +15,7 @@ import { ProductApySnapshot } from './entities/product-apy-snapshot.entity';
 import { WaitlistService } from './waitlist.service';
 import { WithdrawalRequest } from './entities/withdrawal-request.entity';
 import { Transaction } from '../transactions/entities/transaction.entity';
+import { AuditLogService } from '../../common/services/audit-log.service';
 
 describe('SavingsService', () => {
   let service: SavingsService;
@@ -143,6 +144,10 @@ describe('SavingsService', () => {
         {
           provide: CACHE_MANAGER,
           useValue: cacheManager,
+        },
+        {
+          provide: AuditLogService,
+          useValue: { log: jest.fn().mockResolvedValue(undefined) },
         },
       ],
     }).compile();

@@ -5,6 +5,7 @@ import {
   ConflictException,
   Logger,
   Inject,
+  Optional,
 } from '@nestjs/common';
 import { CACHE_MANAGER } from '@nestjs/cache-manager';
 import { ConfigService } from '@nestjs/config';
@@ -46,12 +47,16 @@ import { User } from '../user/entities/user.entity';
 import { SavingsService as BlockchainSavingsService } from '../blockchain/savings.service';
 import { PredictiveEvaluatorService } from './services/predictive-evaluator.service';
 import { EventEmitter2 } from '@nestjs/event-emitter';
-import { Optional } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { SavingsProductVersionAudit } from './entities/savings-product-version-audit.entity';
 import { WaitlistService } from './waitlist.service';
 import { MilestoneService } from './services/milestone.service';
+import { AuditLogService } from '../../common/services/audit-log.service';
+import {
+  AuditAction,
+  AuditResourceType,
+} from '../../common/entities/audit-log.entity';
 
 export type SavingsGoalProgress = GoalProgressDto;
 
@@ -127,6 +132,7 @@ export class SavingsService {
     private readonly waitlistService: WaitlistService,
     private readonly configService: ConfigService,
     @Inject(CACHE_MANAGER) private readonly cacheManager: Cache,
+    private readonly auditLogService: AuditLogService,
     @Optional() private readonly eventEmitter?: EventEmitter2,
   ) {}
 
@@ -449,6 +455,8 @@ export class SavingsService {
     productId: string,
     amount: number,
     overrideLimits = false,
+    correlationId?: string,
+    requestId?: string,
   ): Promise<UserSubscription> {
     const product = await this.findOneProduct(productId);
     await this.syncCapacityState(product);
@@ -538,6 +546,18 @@ export class SavingsService {
 
     // Record waitlist conversion if the user was on the waitlist
     await this.waitlistService.recordConversion(userId, product.id);
+
+    await this.auditLogService.log({
+      action: AuditAction.DEPOSIT,
+      resourceType: AuditResourceType.SAVINGS,
+      actor: userId,
+      correlationId,
+      requestId,
+      resourceId: savedSubscription.id,
+      description: `User subscribed to savings product ${product.name} with amount ${amount}`,
+      newValue: { productId, amount, subscriptionId: savedSubscription.id },
+      success: true,
+    });
 
     return savedSubscription;
   }
@@ -1060,6 +1080,8 @@ export class SavingsService {
     subscriptionId: string,
     amount: number,
     reason?: string,
+    correlationId?: string,
+    requestId?: string,
   ): Promise<WithdrawalRequest> {
     const subscription = await this.subscriptionRepository.findOne({
       where: { id: subscriptionId, userId },
@@ -1106,10 +1128,24 @@ export class SavingsService {
     const saved = await this.withdrawalRepository.save(withdrawalRequest);
 
     // Process withdrawal asynchronously
-    this.processWithdrawal(saved.id).catch((error) => {
-      this.logger.error(
-        `Failed to process withdrawal ${saved.id}: ${(error as Error).message}`,
-      );
+    this.processWithdrawal(saved.id, correlationId, requestId).catch(
+      (error) => {
+        this.logger.error(
+          `Failed to process withdrawal ${saved.id}: ${(error as Error).message}`,
+        );
+      },
+    );
+
+    await this.auditLogService.log({
+      action: AuditAction.WITHDRAW,
+      resourceType: AuditResourceType.WITHDRAWAL_REQUEST,
+      actor: userId,
+      correlationId,
+      requestId,
+      resourceId: saved.id,
+      description: `User requested withdrawal of ${amount} from subscription ${subscriptionId}${reason ? `: ${reason}` : ''}`,
+      newValue: { subscriptionId, amount, penalty, netAmount, reason },
+      success: true,
     });
 
     return saved;
@@ -1138,7 +1174,11 @@ export class SavingsService {
     return Number(penalty.toFixed(7));
   }
 
-  private async processWithdrawal(withdrawalId: string): Promise<void> {
+  private async processWithdrawal(
+    withdrawalId: string,
+    correlationId?: string,
+    requestId?: string,
+  ): Promise<void> {
     const withdrawal = await this.withdrawalRepository.findOne({
       where: { id: withdrawalId },
       relations: ['subscription', 'subscription.product'],
@@ -1210,6 +1250,23 @@ export class SavingsService {
       withdrawal.completedAt = new Date();
       await this.withdrawalRepository.save(withdrawal);
 
+      await this.auditLogService.log({
+        action: AuditAction.WITHDRAW,
+        resourceType: AuditResourceType.WITHDRAWAL_REQUEST,
+        actor: withdrawal.userId,
+        correlationId,
+        requestId,
+        resourceId: withdrawal.id,
+        description: `Withdrawal ${withdrawalId} processed successfully — net ${withdrawal.netAmount}`,
+        newValue: {
+          status: WithdrawalStatus.COMPLETED,
+          txHash: transaction.txHash,
+          netAmount: withdrawal.netAmount,
+          penalty: withdrawal.penalty,
+        },
+        success: true,
+      });
+
       // Emit event for notification
       this.eventEmitter?.emit('withdrawal.completed', {
         userId: withdrawal.userId,
@@ -1222,6 +1279,19 @@ export class SavingsService {
     } catch (error) {
       withdrawal.status = WithdrawalStatus.FAILED;
       await this.withdrawalRepository.save(withdrawal);
+
+      await this.auditLogService.log({
+        action: AuditAction.WITHDRAW,
+        resourceType: AuditResourceType.WITHDRAWAL_REQUEST,
+        actor: withdrawal.userId,
+        correlationId,
+        requestId,
+        resourceId: withdrawal.id,
+        description: `Withdrawal ${withdrawalId} failed: ${(error as Error).message}`,
+        errorMessage: (error as Error).message,
+        success: false,
+      });
+
       throw error;
     }
   }

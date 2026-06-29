@@ -19,6 +19,11 @@ import {
 } from './dto/dispute.dto';
 import { NotificationsService } from '../notifications/notifications.service';
 import { NotificationType } from '../notifications/entities/notification.entity';
+import { AuditLogService } from '../../common/services/audit-log.service';
+import {
+  AuditAction,
+  AuditResourceType,
+} from '../../common/entities/audit-log.entity';
 
 const ALLOWED_TRANSITIONS: Record<DisputeStatus, DisputeStatus[]> = {
   [DisputeStatus.OPEN]: [
@@ -70,9 +75,14 @@ export class DisputesService {
     @InjectRepository(DisputeTimeline)
     private readonly timelineRepository: Repository<DisputeTimeline>,
     private readonly notificationsService: NotificationsService,
+    private readonly auditLogService: AuditLogService,
   ) {}
 
-  async createDispute(createDisputeDto: CreateDisputeDto): Promise<Dispute> {
+  async createDispute(
+    createDisputeDto: CreateDisputeDto,
+    correlationId?: string,
+    requestId?: string,
+  ): Promise<Dispute> {
     const claim = await this.claimRepository.findOneBy({
       id: createDisputeDto.claimId,
     });
@@ -96,10 +106,20 @@ export class DisputesService {
       }),
     );
 
-    // Notify (in a real app, we'd notify the claim owner or admins)
-    // For now, let's just assume there's a way to find them.
-    // For demo, we'll skip actual notification to a specific user since we don't have user ID of claim owner here easily without more queries.
-    // But we can log it.
+    await this.auditLogService.log({
+      action: AuditAction.CREATE,
+      resourceType: AuditResourceType.DISPUTE,
+      actor: savedDispute.disputedBy || 'unknown',
+      correlationId,
+      requestId,
+      resourceId: savedDispute.id,
+      description: `User submitted dispute for claim ${createDisputeDto.claimId}`,
+      newValue: {
+        claimId: createDisputeDto.claimId,
+        reason: createDisputeDto.reason,
+      },
+      success: true,
+    });
 
     return savedDispute;
   }
@@ -156,7 +176,12 @@ export class DisputesService {
     return savedMessage;
   }
 
-  async startInvestigation(id: string, actor: string): Promise<Dispute> {
+  async startInvestigation(
+    id: string,
+    actor: string,
+    correlationId?: string,
+    requestId?: string,
+  ): Promise<Dispute> {
     const dispute = await this.findOne(id);
     const previousState = { status: dispute.status };
 
@@ -182,6 +207,19 @@ export class DisputesService {
       }),
     );
 
+    await this.auditLogService.log({
+      action: AuditAction.UPDATE,
+      resourceType: AuditResourceType.DISPUTE,
+      actor,
+      correlationId,
+      requestId,
+      resourceId: id,
+      description: `Investigation started on dispute ${id}`,
+      previousValue: previousState,
+      newValue: { status: DisputeStatus.UNDER_REVIEW, assignedTo: actor },
+      success: true,
+    });
+
     return updatedDispute;
   }
 
@@ -189,6 +227,8 @@ export class DisputesService {
     id: string,
     actor: string,
     resolution: string,
+    correlationId?: string,
+    requestId?: string,
   ): Promise<Dispute> {
     const dispute = await this.findOne(id);
     const previousState = { status: dispute.status };
@@ -216,10 +256,32 @@ export class DisputesService {
       }),
     );
 
+    await this.auditLogService.log({
+      action: AuditAction.RESOLVE,
+      resourceType: AuditResourceType.DISPUTE,
+      actor,
+      correlationId,
+      requestId,
+      resourceId: id,
+      description: `Dispute ${id} resolved: ${resolution}`,
+      previousValue: previousState,
+      newValue: {
+        status: DisputeStatus.RESOLVED,
+        resolution,
+        resolvedBy: actor,
+      },
+      success: true,
+    });
+
     return updatedDispute;
   }
 
-  async closeDispute(id: string, actor: string): Promise<Dispute> {
+  async closeDispute(
+    id: string,
+    actor: string,
+    correlationId?: string,
+    requestId?: string,
+  ): Promise<Dispute> {
     const dispute = await this.findOne(id);
     const previousState = { status: dispute.status };
 
@@ -243,10 +305,28 @@ export class DisputesService {
       }),
     );
 
+    await this.auditLogService.log({
+      action: AuditAction.UPDATE,
+      resourceType: AuditResourceType.DISPUTE,
+      actor,
+      correlationId,
+      requestId,
+      resourceId: id,
+      description: `Dispute ${id} closed`,
+      previousValue: previousState,
+      newValue: { status: DisputeStatus.CLOSED },
+      success: true,
+    });
+
     return updatedDispute;
   }
 
-  async escalateDispute(id: string, actor: string): Promise<Dispute> {
+  async escalateDispute(
+    id: string,
+    actor: string,
+    correlationId?: string,
+    requestId?: string,
+  ): Promise<Dispute> {
     const dispute = await this.findOne(id);
     const previousState = { status: dispute.status };
 
@@ -271,6 +351,19 @@ export class DisputesService {
         newState: { status: dispute.status },
       }),
     );
+
+    await this.auditLogService.log({
+      action: AuditAction.ESCALATE,
+      resourceType: AuditResourceType.DISPUTE,
+      actor,
+      correlationId,
+      requestId,
+      resourceId: id,
+      description: `Dispute ${id} escalated to ${actor}`,
+      previousValue: previousState,
+      newValue: { status: DisputeStatus.ESCALATED, escalatedTo: actor },
+      success: true,
+    });
 
     return updatedDispute;
   }

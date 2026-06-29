@@ -11,6 +11,8 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { DisputesService } from './disputes.service';
+import { CorrelationId } from '../../common/decorators/correlation-id.decorator';
+import { RequestId } from '../../common/decorators/request-id.decorator';
 import {
   CreateDisputeDto,
   UpdateDisputeDto,
@@ -30,8 +32,14 @@ export class DisputesController {
   @ApiResponse({ status: 400, description: 'Invalid claim ID' })
   async createDispute(
     @Body() createDisputeDto: CreateDisputeDto,
+    @CorrelationId() correlationId?: string,
+    @RequestId() requestId?: string,
   ): Promise<Dispute> {
-    return await this.disputesService.createDispute(createDisputeDto);
+    return await this.disputesService.createDispute(
+      createDisputeDto,
+      correlationId,
+      requestId,
+    );
   }
 
   @Get()
@@ -91,8 +99,15 @@ export class DisputesController {
   async startInvestigation(
     @Param('id') id: string,
     @Query('actor') actor: string,
+    @CorrelationId() correlationId?: string,
+    @RequestId() requestId?: string,
   ): Promise<Dispute> {
-    return await this.disputesService.startInvestigation(id, actor);
+    return await this.disputesService.startInvestigation(
+      id,
+      actor,
+      correlationId,
+      requestId,
+    );
   }
 
   @Patch(':id/resolve')
@@ -103,8 +118,16 @@ export class DisputesController {
     @Param('id') id: string,
     @Query('actor') actor: string,
     @Body('resolution') resolution: string,
+    @CorrelationId() correlationId?: string,
+    @RequestId() requestId?: string,
   ): Promise<Dispute> {
-    return await this.disputesService.resolveDispute(id, actor, resolution);
+    return await this.disputesService.resolveDispute(
+      id,
+      actor,
+      resolution,
+      correlationId,
+      requestId,
+    );
   }
 
   @Patch(':id/close')
@@ -114,8 +137,15 @@ export class DisputesController {
   async closeDispute(
     @Param('id') id: string,
     @Query('actor') actor: string,
+    @CorrelationId() correlationId?: string,
+    @RequestId() requestId?: string,
   ): Promise<Dispute> {
-    return await this.disputesService.closeDispute(id, actor);
+    return await this.disputesService.closeDispute(
+      id,
+      actor,
+      correlationId,
+      requestId,
+    );
   }
 
   @Patch(':id/escalate')
@@ -125,7 +155,14 @@ export class DisputesController {
   async escalateDispute(
     @Param('id') id: string,
     @Query('actor') actor: string,
+    @CorrelationId() correlationId?: string,
+    @RequestId() requestId?: string,
   ): Promise<Dispute> {
-    return await this.disputesService.escalateDispute(id, actor);
+    return await this.disputesService.escalateDispute(
+      id,
+      actor,
+      correlationId,
+      requestId,
+    );
   }
 }
