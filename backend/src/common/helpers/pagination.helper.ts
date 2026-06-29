@@ -19,6 +19,7 @@ export async function paginate<T extends ObjectLiteral>(
 
   queryBuilder
     .orderBy(`${queryBuilder.alias}.createdAt`, order)
+    .addOrderBy(`${queryBuilder.alias}.id`, order)
     .skip(skip)
     .take(pageSize);
 
