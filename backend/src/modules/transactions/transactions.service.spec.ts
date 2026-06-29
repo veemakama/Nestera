@@ -1,5 +1,6 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { getRepositoryToken } from '@nestjs/typeorm';
+import { TransactionSavedSearch } from './entities/transaction-saved-search.entity';
 import { Repository, SelectQueryBuilder } from 'typeorm';
 import { TransactionsService } from './transactions.service';
 import {
@@ -33,6 +34,10 @@ describe('TransactionsService', () => {
         {
           provide: getRepositoryToken(LedgerTransaction),
           useValue: mockRepository,
+        },
+        {
+          provide: getRepositoryToken(TransactionSavedSearch),
+          useValue: { find: jest.fn(), findOne: jest.fn(), save: jest.fn(), create: jest.fn(), delete: jest.fn() },
         },
       ],
     }).compile();
